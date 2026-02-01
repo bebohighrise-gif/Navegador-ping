@@ -44,7 +44,7 @@ def index():
         url = request.form.get("url")
         ping_url = request.form.get("ping_url")
         
-        # Añadir nueva URL al navegador
+        # Abrir nueva web en el navegador
         if url:
             if not url.startswith("http"):
                 url = "https://" + url
@@ -52,7 +52,7 @@ def index():
                 urls_abiertas.append(url)
                 guardar_historial()
         
-        # Hacer ping manual a URL ingresada
+        # Ping a cualquier URL desde el servidor
         if ping_url:
             if not ping_url.startswith("http"):
                 ping_url = "https://" + ping_url
