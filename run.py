@@ -24,7 +24,7 @@ def guardar_historial():
     with open(HISTORIAL_FILE, "w") as f:
         json.dump(urls_abiertas, f)
 
-# Ping automático al servidor cada 1 minuto para mantenerlo despierto
+# Ping automático al servidor cada 1 minuto
 def keep_alive():
     def ping_local():
         while True:
@@ -32,7 +32,7 @@ def keep_alive():
                 requests.get("http://localhost:5000")
             except:
                 pass
-            time.sleep(60)  # ping cada 1 minuto
+            time.sleep(60)
     threading.Thread(target=ping_local, daemon=True).start()
 
 keep_alive()
@@ -44,7 +44,6 @@ def index():
         url = request.form.get("url")
         ping_url = request.form.get("ping_url")
         
-        # Abrir nueva web en el navegador
         if url:
             if not url.startswith("http"):
                 url = "https://" + url
@@ -52,7 +51,6 @@ def index():
                 urls_abiertas.append(url)
                 guardar_historial()
         
-        # Ping a cualquier URL desde el servidor
         if ping_url:
             if not ping_url.startswith("http"):
                 ping_url = "https://" + ping_url
