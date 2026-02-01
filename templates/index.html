@@ -2,91 +2,101 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>WEB NOCTUNA - Navegador 24/7</title>
+<title>🌌 WEB NOCTURNA - Navegador 24/7</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 body {
     margin:0;
     font-family:'Inter',sans-serif;
-    background:#121212;
+    background: linear-gradient(135deg,#0f172a,#1e293b,#0f172a);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
     color:#e5e7eb;
     display:flex;
     height:100vh;
     overflow:hidden;
 }
+@keyframes gradientBG{
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:0% 50%}
+}
+
 aside {
     width:260px;
-    background:#1f2937;
+    background: rgba(31,41,55,0.95);
     padding:20px;
     display:flex;
     flex-direction:column;
-    box-shadow:2px 0 8px rgba(0,0,0,0.5);
+    box-shadow:2px 0 12px rgba(0,0,0,0.6);
     overflow-y:auto;
+    backdrop-filter: blur(5px);
 }
-aside h2 { color:#f9fafb; font-weight:600; margin-bottom:15px; }
-aside input, aside button { margin-bottom:10px; padding:10px; border-radius:8px; border:none; font-size:14px; }
-aside input { background:#374151; color:#f9fafb; width:100%; }
-aside input::placeholder { color:#9ca3af; }
-aside input:focus { outline:none; box-shadow:0 0 5px rgba(59,130,246,0.5); }
-aside button { background:#3b82f6; color:white; cursor:pointer; font-weight:600; transition:0.2s; }
-aside button:hover { background:#2563eb; }
-.ping-result { background:#1e40af; color:#e0f2fe; padding:10px; border-radius:8px; margin-bottom:15px; box-shadow:0 2px 4px rgba(0,0,0,0.4); }
+aside h2 { color:#fef3c7; font-weight:700; margin-bottom:15px; text-align:center; letter-spacing:1px; }
+aside input, aside button { margin-bottom:12px; padding:10px; border-radius:12px; border:none; font-size:14px; }
+aside input { background:#374151; color:#fef3c7; width:100%; }
+aside input::placeholder { color:#fbbf24; }
+aside input:focus { outline:none; box-shadow:0 0 8px #f59e0b; }
+aside button { background:#f59e0b; color:#1f2937; cursor:pointer; font-weight:700; transition:0.2s; }
+aside button:hover { background:#fbbf24; }
+
+.ping-result { background: rgba(245,158,11,0.2); color:#fef3c7; padding:10px; border-radius:10px; margin-bottom:15px; text-align:center; font-weight:600; box-shadow:0 2px 6px rgba(0,0,0,0.5); }
 
 main { flex:1; display:flex; flex-direction:column; padding:20px; overflow:hidden; }
-.tabs { display:flex; overflow-x:auto; gap:10px; margin-bottom:15px; scrollbar-width:thin; scrollbar-color:#3b82f6 #1f2937; position:relative; }
+.tabs { display:flex; overflow-x:auto; gap:12px; margin-bottom:18px; scrollbar-width:thin; scrollbar-color:#f59e0b #1e293b; position:relative; }
 .tabs::-webkit-scrollbar { height:6px; }
-.tabs::-webkit-scrollbar-thumb { background:#3b82f6; border-radius:3px; }
-.tabs::-webkit-scrollbar-track { background:#1f2937; }
-.tab { background:#374151; padding:10px 15px; border-radius:8px; cursor:pointer; transition:0.2s; white-space:nowrap; color:#f9fafb; position:relative; }
-.tab.active { background:#3b82f6; color:white; }
-.tab:hover { background:#2563eb; }
+.tabs::-webkit-scrollbar-thumb { background:#f59e0b; border-radius:3px; }
+.tabs::-webkit-scrollbar-track { background:#1e293b; }
+.tab { background: rgba(55,65,81,0.7); padding:10px 18px; border-radius:12px; cursor:pointer; transition:0.2s; white-space:nowrap; color:#fef3c7; font-weight:600; position:relative; display:flex; align-items:center; gap:6px; }
+.tab.active { background:#f59e0b; color:#1f2937; }
+.tab:hover { background:#fbbf24; color:#1f2937; }
+.tab::before { content:"🌙"; }
 
-/* Mini preview */
 .tab-preview {
     position:absolute;
-    top:-250px;
+    top:-260px;
     left:50%;
     transform:translateX(-50%);
-    width:300px;
+    width:320px;
     height:200px;
-    border:1px solid #3b82f6;
-    border-radius:8px;
+    border:2px solid #f59e0b;
+    border-radius:12px;
     overflow:hidden;
     display:none;
     z-index:100;
-    box-shadow:0 8px 16px rgba(0,0,0,0.5);
+    box-shadow:0 8px 18px rgba(0,0,0,0.6);
 }
 .tab-preview iframe { width:100%; height:100%; border:none; }
 
-.iframe-container { flex:1; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.5); background:#1f2937; display:none; flex-direction:column; position:relative; transition: transform 0.3s, opacity 0.3s; }
+.iframe-container { flex:1; border-radius:16px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,0.6); background: rgba(31,41,55,0.95); display:none; flex-direction:column; position:relative; transition: transform 0.3s, opacity 0.3s; }
 .iframe-container.active { display:flex; transform: scale(1); opacity:1; }
-.iframe-container:not(.active) { transform: scale(0.98); opacity:0; pointer-events:none; }
-.iframe-container iframe { width:100%; height:100%; border:none; }
+.iframe-container:not(.active) { transform: scale(0.97); opacity:0; pointer-events:none; }
+.iframe-container iframe { width:100%; height:100%; border:none; border-radius:12px; }
 
-.iframe-header { display:flex; justify-content:flex-end; background:#111827; padding:5px 10px; }
-.cerrar-btn { background:#ef4444; color:white; border:none; padding:5px 10px; border-radius:6px; font-weight:600; cursor:pointer; transition:0.2s; }
+.iframe-header { display:flex; justify-content:flex-end; background: rgba(17,24,39,0.8); padding:6px 12px; border-bottom:1px solid #f59e0b; }
+.cerrar-btn { background:#ef4444; color:white; border:none; padding:6px 12px; border-radius:8px; font-weight:700; cursor:pointer; transition:0.2s; }
 .cerrar-btn:hover { background:#b91c1c; }
 
 .iframe-container:hover { transform: scale(1.02); transition: transform 0.2s; }
 
-@media(max-width:800px){
-    aside { width:200px; }
-    .tab { padding:8px 10px; font-size:13px; }
-    .tab-preview { width:200px; height:130px; top:-160px; }
+@media(max-width:900px){
+    aside { width:220px; }
+    .tab { padding:8px 12px; font-size:13px; }
+    .tab-preview { width:240px; height:160px; top:-180px; }
 }
 </style>
 </head>
 <body>
 
 <aside>
-<h2>WEB NOCTUNA</h2>
+<h2>🌌 WEB NOCTURNA</h2>
 
 <form method="POST" id="new-url-form">
 <input type="text" name="url" placeholder="Escribe URL">
 <button type="submit">Abrir</button>
 </form>
 
-<h2>Ping a URL</h2>
+<h2>🔔 Ping a URL</h2>
 <form method="POST" id="ping-form">
 <input type="text" name="ping_url" placeholder="Escribe URL para ping">
 <button type="submit">Ping</button>
@@ -123,7 +133,6 @@ main { flex:1; display:flex; flex-direction:column; padding:20px; overflow:hidde
 </main>
 
 <script>
-// Manejo pestañas
 const tabs = document.querySelectorAll('.tab');
 const containers = document.querySelectorAll('.iframe-container');
 function activateTab(idx){
@@ -144,4 +153,4 @@ if(tabs.length>0) activateTab(0);
 </script>
 
 </body>
-    </html>
+</html>
