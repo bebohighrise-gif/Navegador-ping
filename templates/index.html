@@ -1,156 +1,75 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>🌌 WEB NOCTURNA - Navegador 24/7</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-<style>
-body {
-    margin:0;
-    font-family:'Inter',sans-serif;
-    background: linear-gradient(135deg,#0f172a,#1e293b,#0f172a);
-    background-size: 400% 400%;
-    animation: gradientBG 15s ease infinite;
-    color:#e5e7eb;
-    display:flex;
-    height:100vh;
-    overflow:hidden;
-}
-@keyframes gradientBG{
-    0%{background-position:0% 50%}
-    50%{background-position:100% 50%}
-    100%{background-position:0% 50%}
-}
-
-aside {
-    width:260px;
-    background: rgba(31,41,55,0.95);
-    padding:20px;
-    display:flex;
-    flex-direction:column;
-    box-shadow:2px 0 12px rgba(0,0,0,0.6);
-    overflow-y:auto;
-    backdrop-filter: blur(5px);
-}
-aside h2 { color:#fef3c7; font-weight:700; margin-bottom:15px; text-align:center; letter-spacing:1px; }
-aside input, aside button { margin-bottom:12px; padding:10px; border-radius:12px; border:none; font-size:14px; }
-aside input { background:#374151; color:#fef3c7; width:100%; }
-aside input::placeholder { color:#fbbf24; }
-aside input:focus { outline:none; box-shadow:0 0 8px #f59e0b; }
-aside button { background:#f59e0b; color:#1f2937; cursor:pointer; font-weight:700; transition:0.2s; }
-aside button:hover { background:#fbbf24; }
-
-.ping-result { background: rgba(245,158,11,0.2); color:#fef3c7; padding:10px; border-radius:10px; margin-bottom:15px; text-align:center; font-weight:600; box-shadow:0 2px 6px rgba(0,0,0,0.5); }
-
-main { flex:1; display:flex; flex-direction:column; padding:20px; overflow:hidden; }
-.tabs { display:flex; overflow-x:auto; gap:12px; margin-bottom:18px; scrollbar-width:thin; scrollbar-color:#f59e0b #1e293b; position:relative; }
-.tabs::-webkit-scrollbar { height:6px; }
-.tabs::-webkit-scrollbar-thumb { background:#f59e0b; border-radius:3px; }
-.tabs::-webkit-scrollbar-track { background:#1e293b; }
-.tab { background: rgba(55,65,81,0.7); padding:10px 18px; border-radius:12px; cursor:pointer; transition:0.2s; white-space:nowrap; color:#fef3c7; font-weight:600; position:relative; display:flex; align-items:center; gap:6px; }
-.tab.active { background:#f59e0b; color:#1f2937; }
-.tab:hover { background:#fbbf24; color:#1f2937; }
-.tab::before { content:"🌙"; }
-
-.tab-preview {
-    position:absolute;
-    top:-260px;
-    left:50%;
-    transform:translateX(-50%);
-    width:320px;
-    height:200px;
-    border:2px solid #f59e0b;
-    border-radius:12px;
-    overflow:hidden;
-    display:none;
-    z-index:100;
-    box-shadow:0 8px 18px rgba(0,0,0,0.6);
-}
-.tab-preview iframe { width:100%; height:100%; border:none; }
-
-.iframe-container { flex:1; border-radius:16px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,0.6); background: rgba(31,41,55,0.95); display:none; flex-direction:column; position:relative; transition: transform 0.3s, opacity 0.3s; }
-.iframe-container.active { display:flex; transform: scale(1); opacity:1; }
-.iframe-container:not(.active) { transform: scale(0.97); opacity:0; pointer-events:none; }
-.iframe-container iframe { width:100%; height:100%; border:none; border-radius:12px; }
-
-.iframe-header { display:flex; justify-content:flex-end; background: rgba(17,24,39,0.8); padding:6px 12px; border-bottom:1px solid #f59e0b; }
-.cerrar-btn { background:#ef4444; color:white; border:none; padding:6px 12px; border-radius:8px; font-weight:700; cursor:pointer; transition:0.2s; }
-.cerrar-btn:hover { background:#b91c1c; }
-
-.iframe-container:hover { transform: scale(1.02); transition: transform 0.2s; }
-
-@media(max-width:900px){
-    aside { width:220px; }
-    .tab { padding:8px 12px; font-size:13px; }
-    .tab-preview { width:240px; height:160px; top:-180px; }
-}
-</style>
+    <meta charset="UTF-8">
+    <title>Nocturna X-God Browser</title>
+    <style>
+        :root { --neon: #00ffcc; --bg: #0a0a0a; --panel: #141414; }
+        body { margin:0; font-family: 'Segoe UI', sans-serif; background:var(--bg); color:#fff; display:flex; height:100vh; overflow:hidden; }
+        aside { width:360px; background:var(--panel); border-right:1px solid #222; padding:20px; display:flex; flex-direction:column; box-shadow: 10px 0 30px #000; }
+        input, textarea { background:#000; border:1px solid #333; color:var(--neon); padding:12px; width:100%; border-radius:8px; margin-bottom:10px; font-family: monospace; outline:none; }
+        .btn { background:var(--neon); color:#000; border:none; padding:12px; font-weight:900; width:100%; cursor:pointer; border-radius:8px; text-transform:uppercase; transition:0.3s; }
+        .btn:hover { box-shadow: 0 0 20px var(--neon); }
+        main { flex:1; display:flex; flex-direction:column; }
+        iframe { flex:1; border:none; background:#fff; border-radius:20px 20px 0 0; }
+    </style>
 </head>
 <body>
+    <aside>
+        <h2 style="color:var(--neon); text-align:center;">🌌 NOCTURNA GOD</h2>
+        <input type="text" id="url-nav" placeholder="Escribe URL (ej: google.com)">
+        <button class="btn" style="margin-bottom:20px;" onclick="navegar()">IR A WEB</button>
+        
+        <input type="text" id="repo" placeholder="URL GitHub para clonar">
+        <input type="text" id="name" placeholder="Nombre del proyecto">
+        <button class="btn" onclick="deploy()">Auto-Desplegar</button>
+        
+        <h3 style="font-size:12px; color:#555; margin-top:20px;">PERSISTENCIA (Auto-Save)</h3>
+        <textarea id="data-area" rows="10" placeholder="Pega aquí tus datos importantes..."></textarea>
+        <button class="btn" style="background:#fff; font-size:11px;" onclick="descargar()">Backup JSON</button>
+    </aside>
 
-<aside>
-<h2>🌌 WEB NOCTURNA</h2>
+    <main>
+        <div style="background:#111; padding:8px 20px; font-size:11px; color:var(--neon);">MODO_PROXY_ACTIVO // RENDER_SECURE</div>
+        <iframe id="ifr" src="/proxy?url=https://www.google.com"></iframe>
+    </main>
 
-<form method="POST" id="new-url-form">
-<input type="text" name="url" placeholder="Escribe URL">
-<button type="submit">Abrir</button>
-</form>
+    <audio id="beep" src="https://assets.mixkit.co"></audio>
 
-<h2>🔔 Ping a URL</h2>
-<form method="POST" id="ping-form">
-<input type="text" name="ping_url" placeholder="Escribe URL para ping">
-<button type="submit">Ping</button>
-</form>
+    <script>
+        const area = document.getElementById('data-area');
+        area.value = localStorage.getItem('nocturna_v8') || "";
 
-{% if ping_result %}
-<div class="ping-result">{{ ping_result }}</div>
-{% endif %}
+        setInterval(() => {
+            if(area.value !== localStorage.getItem('nocturna_v8')) {
+                localStorage.setItem('nocturna_v8', area.value);
+                document.getElementById('beep').play().catch(()=>{});
+            }
+        }, 60000);
 
-</aside>
+        function navegar() {
+            let url = document.getElementById('url-nav').value;
+            if(!url.startsWith('http')) url = 'https://' + url;
+            document.getElementById('ifr').src = '/proxy?url=' + encodeURIComponent(url);
+        }
 
-<main>
-<div class="tabs" id="tabs">
-{% for url in urls %}
-<div class="tab" data-index="{{ loop.index0 }}">{{ url }}
-    <div class="tab-preview">
-        <iframe src="{{ url }}"></iframe>
-    </div>
-</div>
-{% endfor %}
-</div>
+        async function deploy() {
+            const repo = document.getElementById('repo').value;
+            const name = document.getElementById('name').value;
+            const res = await fetch('/deploy', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({repo, name})
+            });
+            const d = await res.json();
+            alert(d.msg);
+        }
 
-{% for url in urls %}
-<div class="iframe-container" data-index="{{ loop.index0 }}">
-    <div class="iframe-header">
-        <form action="/cerrar/{{ loop.index0 }}" method="get" style="display:inline;">
-            <button class="cerrar-btn">X</button>
-        </form>
-    </div>
-    <iframe src="{{ url }}"></iframe>
-</div>
-{% endfor %}
-
-</main>
-
-<script>
-const tabs = document.querySelectorAll('.tab');
-const containers = document.querySelectorAll('.iframe-container');
-function activateTab(idx){
-    containers.forEach(c=>c.classList.remove('active'));
-    tabs.forEach(t=>t.classList.remove('active'));
-    containers[idx]?.classList.add('active');
-    tabs[idx]?.classList.add('active');
-    tabs[idx]?.scrollIntoView({behavior:'smooth', inline:'center'});
-}
-tabs.forEach(tab=>{
-    const idx = tab.dataset.index;
-    const preview = tab.querySelector('.tab-preview');
-    tab.addEventListener('click', ()=>activateTab(idx));
-    tab.addEventListener('mouseenter', ()=>preview.style.display='block');
-    tab.addEventListener('mouseleave', ()=>preview.style.display='none');
-});
-if(tabs.length>0) activateTab(0);
-</script>
-
+        function descargar() {
+            const blob = new Blob([area.value], {type:'application/json'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = `backup_${Date.now()}.json`; a.click();
+        }
+    </script>
 </body>
 </html>
