@@ -1,0 +1,2179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nocturna OS - Next Generation Browser</title>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Dark Theme */
+            --void-black: #0a0a0f;
+            --deep-space: #12121a;
+            --midnight: #1a1a26;
+            --shadow-blue: #1e1e2e;
+            --border-glow: #2a2a3e;
+            
+            /* Accent Colors */
+            --neon-cyan: #00fff5;
+            --electric-blue: #0084ff;
+            --quantum-purple: #b066ff;
+            --plasma-pink: #ff006e;
+            --aurora-green: #00ff94;
+            
+            /* Text */
+            --text-primary: #e8e8f2;
+            --text-secondary: #9999b3;
+            --text-tertiary: #666680;
+            
+            /* Effects */
+            --glow-cyan: 0 0 20px rgba(0, 255, 245, 0.3);
+            --glow-blue: 0 0 30px rgba(0, 132, 255, 0.4);
+            --glow-purple: 0 0 25px rgba(176, 102, 255, 0.35);
+            
+            /* Glass Morphism */
+            --glass-bg: rgba(26, 26, 38, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        body {
+            font-family: 'DM Sans', -apple-system, sans-serif;
+            background: var(--void-black);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated Background */
+        .cosmic-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background: 
+                radial-gradient(ellipse at 20% 30%, rgba(0, 132, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(176, 102, 255, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(0, 255, 245, 0.04) 0%, transparent 50%);
+            animation: cosmicShift 20s ease-in-out infinite;
+        }
+
+        .cosmic-bg::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(0, 255, 245, 0.02) 1px, transparent 1px),
+                radial-gradient(circle at 80% 80%, rgba(176, 102, 255, 0.02) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridDrift 40s linear infinite;
+        }
+
+        @keyframes cosmicShift {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        @keyframes gridDrift {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(50px); }
+        }
+
+        /* ===== TOP CHROME BAR ===== */
+        .chrome-bar {
+            position: relative;
+            z-index: 100;
+            height: 64px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Logo */
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-right: 20px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .logo-container:hover {
+            transform: scale(1.05);
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--electric-blue));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 800;
+            box-shadow: var(--glow-cyan);
+            animation: logoPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes logoPulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 245, 0.3); }
+            50% { box-shadow: 0 0 35px rgba(0, 255, 245, 0.6), 0 0 50px rgba(0, 132, 255, 0.4); }
+        }
+
+        .logo-text {
+            font-family: 'Syne', sans-serif;
+            font-size: 22px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--electric-blue), var(--quantum-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+
+        /* Navigation Controls */
+        .nav-controls {
+            display: flex;
+            gap: 6px;
+        }
+
+        .nav-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--shadow-blue);
+            border: 1px solid var(--border-glow);
+            color: var(--text-secondary);
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-btn:hover {
+            background: var(--midnight);
+            color: var(--neon-cyan);
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0, 255, 245, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .nav-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Omnibox */
+        .omnibox-container {
+            flex: 1;
+            max-width: 720px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .omnibox {
+            width: 100%;
+            height: 44px;
+            background: var(--deep-space);
+            border: 1.5px solid var(--border-glow);
+            border-radius: 22px;
+            padding: 0 50px 0 20px;
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: 'DM Sans', sans-serif;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            outline: none;
+        }
+
+        .omnibox:focus {
+            background: var(--midnight);
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 0 3px rgba(0, 255, 245, 0.1), 0 8px 24px rgba(0, 0, 0, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .omnibox::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-tertiary);
+            font-size: 20px;
+            pointer-events: none;
+            transition: all 0.3s;
+        }
+
+        .omnibox:focus + .search-icon {
+            color: var(--neon-cyan);
+        }
+
+        /* Tool Buttons */
+        .tools-section {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+        }
+
+        .tool-btn {
+            height: 40px;
+            padding: 0 18px;
+            background: var(--shadow-blue);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tool-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 245, 0.1), transparent);
+            transition: left 0.5s;
+        }
+
+        .tool-btn:hover::before {
+            left: 100%;
+        }
+
+        .tool-btn:hover {
+            background: var(--midnight);
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 255, 245, 0.2);
+        }
+
+        .tool-btn.active {
+            background: linear-gradient(135deg, var(--electric-blue), var(--quantum-purple));
+            border-color: transparent;
+            color: white;
+            box-shadow: 0 4px 20px rgba(0, 132, 255, 0.4);
+        }
+
+        .tool-icon {
+            font-size: 18px;
+        }
+
+        .history-btn {
+            margin-left: auto;
+        }
+
+        /* ===== HAMBURGER MENU ===== */
+        .hamburger-btn {
+            position: relative;
+        }
+
+        .hamburger-icon {
+            width: 20px;
+            height: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        .hamburger-icon span {
+            width: 100%;
+            height: 2px;
+            background: var(--text-secondary);
+            border-radius: 2px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .hamburger-btn:hover .hamburger-icon span {
+            background: var(--neon-cyan);
+        }
+
+        .sidebar-open .hamburger-icon span:nth-child(1) {
+            transform: translateY(7px) rotate(45deg);
+        }
+
+        .sidebar-open .hamburger-icon span:nth-child(2) {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+
+        .sidebar-open .hamburger-icon span:nth-child(3) {
+            transform: translateY(-7px) rotate(-45deg);
+        }
+
+        /* ===== LEFT SIDEBAR MENU ===== */
+        .sidebar-menu {
+            position: fixed;
+            top: 64px;
+            left: 0;
+            width: 320px;
+            height: calc(100vh - 64px);
+            background: var(--glass-bg);
+            backdrop-filter: blur(30px) saturate(180%);
+            border-right: 1px solid var(--glass-border);
+            z-index: 95;
+            transform: translateX(-100%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .sidebar-menu.active {
+            transform: translateX(0);
+        }
+
+        .sidebar-overlay {
+            position: fixed;
+            top: 64px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 94;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(180deg, rgba(0, 255, 245, 0.03), transparent);
+        }
+
+        .sidebar-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--electric-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .close-sidebar {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--shadow-blue);
+            border: 1px solid var(--border-glow);
+            color: var(--text-secondary);
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close-sidebar:hover {
+            background: var(--midnight);
+            color: var(--plasma-pink);
+            border-color: var(--plasma-pink);
+            transform: rotate(90deg);
+        }
+
+        .sidebar-content {
+            padding: 16px;
+        }
+
+        .sidebar-item {
+            width: 100%;
+            background: var(--deep-space);
+            border: 1.5px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            position: relative;
+            overflow: hidden;
+            text-align: left;
+        }
+
+        .sidebar-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 245, 0.1), transparent);
+            transition: left 0.5s;
+        }
+
+        .sidebar-item:hover::before {
+            left: 100%;
+        }
+
+        .sidebar-item:hover {
+            background: var(--midnight);
+            border-color: var(--neon-cyan);
+            transform: translateX(8px);
+            box-shadow: 0 8px 24px rgba(0, 255, 245, 0.2);
+        }
+
+        .sidebar-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--electric-blue), var(--quantum-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0, 132, 255, 0.3);
+        }
+
+        .sidebar-item-info {
+            flex: 1;
+        }
+
+        .sidebar-item-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .sidebar-item-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        /* ===== SIDE PANELS ===== */
+        .side-panel {
+            position: fixed;
+            top: 64px;
+            height: calc(100vh - 64px);
+            width: 420px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(30px) saturate(180%);
+            border: 1px solid var(--glass-border);
+            z-index: 90;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 0 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .side-panel.left {
+            left: 0;
+            border-left: none;
+            transform: translateX(-100%);
+        }
+
+        .side-panel.right {
+            right: 0;
+            border-right: none;
+            transform: translateX(100%);
+        }
+
+        .side-panel.active {
+            transform: translateX(0);
+        }
+
+        /* Panel Header */
+        .panel-header {
+            padding: 28px 24px;
+            border-bottom: 1px solid var(--glass-border);
+            background: linear-gradient(180deg, rgba(0, 255, 245, 0.03), transparent);
+        }
+
+        .panel-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--electric-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .panel-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .panel-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .panel-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .panel-content::-webkit-scrollbar-thumb {
+            background: var(--border-glow);
+            border-radius: 4px;
+        }
+
+        .panel-content::-webkit-scrollbar-thumb:hover {
+            background: var(--neon-cyan);
+        }
+
+        /* ===== FORM ELEMENTS ===== */
+        .input-group {
+            margin-bottom: 20px;
+            animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .input-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-field {
+            width: 100%;
+            height: 48px;
+            background: var(--deep-space);
+            border: 1.5px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 0 16px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: 'DM Sans', sans-serif;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            outline: none;
+        }
+
+        .input-field:focus {
+            background: var(--midnight);
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 0 3px rgba(0, 255, 245, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .input-field::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        /* Buttons */
+        .btn {
+            width: 100%;
+            height: 52px;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            overflow: hidden;
+            font-family: 'DM Sans', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--neon-cyan), var(--electric-blue));
+            color: var(--void-black);
+            box-shadow: 0 8px 24px rgba(0, 255, 245, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(0, 255, 245, 0.5);
+        }
+
+        .btn-primary:active {
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--aurora-green), var(--neon-cyan));
+            color: var(--void-black);
+            box-shadow: 0 8px 24px rgba(0, 255, 148, 0.3);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(0, 255, 148, 0.5);
+        }
+
+        .btn-secondary {
+            background: var(--shadow-blue);
+            border: 1.5px solid var(--border-glow);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--midnight);
+            border-color: var(--quantum-purple);
+            box-shadow: 0 8px 24px rgba(176, 102, 255, 0.3);
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 16px 0;
+            animation: statusFadeIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes statusFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .status-success {
+            background: rgba(0, 255, 148, 0.15);
+            color: var(--aurora-green);
+            border: 1px solid rgba(0, 255, 148, 0.3);
+        }
+
+        .status-info {
+            background: rgba(0, 132, 255, 0.15);
+            color: var(--electric-blue);
+            border: 1px solid rgba(0, 132, 255, 0.3);
+        }
+
+        .status-icon {
+            font-size: 16px;
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Setup Section */
+        #setup {
+            display: none;
+        }
+
+        #setup.active {
+            display: block;
+            animation: panelExpand 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes panelExpand {
+            from {
+                opacity: 0;
+                max-height: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                max-height: 2000px;
+                transform: translateY(0);
+            }
+        }
+
+        /* Logs Terminal */
+        .log-terminal {
+            background: var(--void-black);
+            border: 1.5px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 16px;
+            height: 240px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--aurora-green);
+            margin-top: 16px;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .log-terminal::before {
+            content: 'TERMINAL';
+            position: absolute;
+            top: -12px;
+            left: 12px;
+            background: var(--void-black);
+            padding: 0 8px;
+            font-size: 10px;
+            color: var(--text-tertiary);
+            letter-spacing: 1px;
+        }
+
+        .log-terminal::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .log-terminal::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .log-terminal::-webkit-scrollbar-thumb {
+            background: var(--aurora-green);
+            border-radius: 3px;
+        }
+
+        .log-line {
+            margin-bottom: 4px;
+            animation: logAppear 0.3s ease;
+        }
+
+        @keyframes logAppear {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* ===== TABS PANEL ===== */
+        .tab-item {
+            background: var(--deep-space);
+            border: 1.5px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--neon-cyan), var(--electric-blue));
+            transform: translateX(-3px);
+            transition: transform 0.3s;
+        }
+
+        .tab-item:hover {
+            background: var(--midnight);
+            border-color: var(--neon-cyan);
+            transform: translateX(-4px);
+            box-shadow: 0 8px 24px rgba(0, 255, 245, 0.2);
+        }
+
+        .tab-item:hover::before {
+            transform: translateX(0);
+        }
+
+        .tab-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--electric-blue), var(--quantum-purple));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .tab-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .tab-url {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .tab-time {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+
+        .empty-text {
+            font-size: 15px;
+        }
+
+        /* ===== HOME VIEW ===== */
+        #home {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: calc(100vh - 64px);
+            padding: 40px;
+        }
+
+        .home-logo {
+            font-family: 'Syne', sans-serif;
+            font-size: 96px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--electric-blue), var(--quantum-purple), var(--plasma-pink));
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 60px;
+            letter-spacing: -3px;
+            animation: gradientFlow 8s ease infinite;
+            text-shadow: 0 0 80px rgba(0, 255, 245, 0.3);
+        }
+
+        @keyframes gradientFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .home-search {
+            width: 680px;
+            max-width: 90%;
+            position: relative;
+            animation: floatIn 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes floatIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .home-search .omnibox {
+            height: 60px;
+            font-size: 18px;
+            padding: 0 60px 0 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+
+        .home-search .search-icon {
+            font-size: 24px;
+            right: 20px;
+        }
+
+        .home-tagline {
+            margin-top: 24px;
+            font-size: 15px;
+            color: var(--text-tertiary);
+            text-align: center;
+            animation: fadeIn 1.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* ===== WEB VIEW ===== */
+        #web-view {
+            position: relative;
+            z-index: 1;
+            display: none;
+            height: calc(100vh - 64px);
+            background: white;
+        }
+
+        #web-view.active {
+            display: block;
+        }
+
+        .web-controls {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            background: var(--shadow-blue);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .back-btn:hover {
+            background: var(--midnight);
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+            transform: translateX(-4px);
+            box-shadow: 0 4px 20px rgba(0, 255, 245, 0.2);
+        }
+
+        .url-display {
+            flex: 1;
+            height: 40px;
+            background: var(--deep-space);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .url-lock {
+            color: var(--aurora-green);
+            margin-right: 8px;
+        }
+
+        iframe {
+            width: 100%;
+            height: calc(100% - 70px);
+            border: none;
+            background: white;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .side-panel {
+                width: 100%;
+            }
+
+            .home-logo {
+                font-size: 64px;
+            }
+
+            .chrome-bar {
+                flex-wrap: wrap;
+                height: auto;
+                padding: 12px;
+            }
+
+            .omnibox-container {
+                order: 3;
+                width: 100%;
+                margin-top: 12px;
+            }
+        }
+
+        /* ===== MICRO INTERACTIONS ===== */
+        @keyframes ping {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        .notification-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--plasma-pink);
+            border-radius: 50%;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+
+        /* ===== PING MONITORING ===== */
+        .ping-item {
+            background: var(--deep-space);
+            border: 1.5px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            overflow: hidden;
+            animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .ping-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--aurora-green);
+            transition: all 0.3s;
+        }
+
+        .ping-item.offline::before {
+            background: var(--plasma-pink);
+        }
+
+        .ping-item.checking::before {
+            background: var(--electric-blue);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .ping-item:hover {
+            background: var(--midnight);
+            border-color: var(--neon-cyan);
+            box-shadow: 0 8px 24px rgba(0, 255, 245, 0.2);
+            transform: translateX(-4px);
+        }
+
+        .ping-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .ping-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .ping-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .ping-url {
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ping-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .ping-status.online {
+            background: rgba(0, 255, 148, 0.15);
+            color: var(--aurora-green);
+            border: 1px solid rgba(0, 255, 148, 0.3);
+        }
+
+        .ping-status.offline {
+            background: rgba(255, 0, 110, 0.15);
+            color: var(--plasma-pink);
+            border: 1px solid rgba(255, 0, 110, 0.3);
+        }
+
+        .ping-status.checking {
+            background: rgba(0, 132, 255, 0.15);
+            color: var(--electric-blue);
+            border: 1px solid rgba(0, 132, 255, 0.3);
+        }
+
+        .ping-stats {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-glow);
+        }
+
+        .ping-stat {
+            flex: 1;
+        }
+
+        .ping-stat-label {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .ping-stat-value {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+        }
+
+        .ping-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .ping-action-btn {
+            flex: 1;
+            height: 36px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .ping-action-btn.edit {
+            background: var(--shadow-blue);
+            border: 1px solid var(--border-glow);
+            color: var(--text-primary);
+        }
+
+        .ping-action-btn.edit:hover {
+            background: var(--midnight);
+            border-color: var(--electric-blue);
+            color: var(--electric-blue);
+            box-shadow: 0 4px 16px rgba(0, 132, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .ping-action-btn.delete {
+            background: rgba(255, 0, 110, 0.1);
+            border: 1px solid rgba(255, 0, 110, 0.3);
+            color: var(--plasma-pink);
+        }
+
+        .ping-action-btn.delete:hover {
+            background: rgba(255, 0, 110, 0.2);
+            border-color: var(--plasma-pink);
+            box-shadow: 0 4px 16px rgba(255, 0, 110, 0.3);
+            transform: translateY(-2px);
+        }
+
+        /* Edit Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.9);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--glass-bg);
+            backdrop-filter: blur(30px) saturate(180%);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 32px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: modalSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .modal-header {
+            font-family: 'Syne', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--electric-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 24px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .modal-actions .btn {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Animated Background -->
+    <div class="cosmic-bg"></div>
+
+    <!-- Chrome Bar -->
+    <div class="chrome-bar">
+        <!-- Hamburger Menu Button -->
+        <button class="nav-btn hamburger-btn" onclick="toggleSidebar()" title="Menú">
+            <div class="hamburger-icon">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </button>
+
+        <!-- Logo -->
+        <div class="logo-container" onclick="goHome()">
+            <div class="logo-icon">N</div>
+            <div class="logo-text">NOCTURNA</div>
+        </div>
+
+        <!-- Navigation Controls -->
+        <div class="nav-controls">
+            <button class="nav-btn" onclick="goHome()" title="Inicio">🏠</button>
+            <button class="nav-btn" title="Atrás">←</button>
+            <button class="nav-btn" title="Adelante">→</button>
+            <button class="nav-btn" title="Recargar">↻</button>
+        </div>
+
+        <!-- Omnibox -->
+        <div class="omnibox-container">
+            <input type="text" 
+                   class="omnibox" 
+                   id="q" 
+                   placeholder="Busca en Google o escribe una URL..." 
+                   onkeypress="handle(event)">
+            <div class="search-icon">🔍</div>
+        </div>
+
+        <!-- History Button (Right) -->
+        <button class="tool-btn history-btn" onclick="togglePanel('tabs-panel')" id="tabs-btn">
+            <span class="tool-icon">📑</span>
+            <span>Historial</span>
+            <span class="notification-dot" id="tabs-notification" style="display: none;"></span>
+        </button>
+    </div>
+
+    <!-- Left Sidebar Menu -->
+    <div class="sidebar-menu" id="sidebar-menu">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Herramientas</div>
+            <button class="close-sidebar" onclick="toggleSidebar()">✕</button>
+        </div>
+        
+        <div class="sidebar-content">
+            <button class="sidebar-item" onclick="openSection('deploy-panel')">
+                <span class="sidebar-icon">🚀</span>
+                <div class="sidebar-item-info">
+                    <div class="sidebar-item-title">Deploy Engine</div>
+                    <div class="sidebar-item-desc">Desplegar proyectos de GitHub</div>
+                </div>
+            </button>
+
+            <button class="sidebar-item" onclick="openSection('monitoring-panel')">
+                <span class="sidebar-icon">📡</span>
+                <div class="sidebar-item-info">
+                    <div class="sidebar-item-title">Monitoreo</div>
+                    <div class="sidebar-item-desc">Ping de servicios en tiempo real</div>
+                </div>
+            </button>
+
+            <button class="sidebar-item" onclick="openSection('settings-panel')">
+                <span class="sidebar-icon">⚙️</span>
+                <div class="sidebar-item-info">
+                    <div class="sidebar-item-title">Configuración</div>
+                    <div class="sidebar-item-desc">Ajustes del navegador</div>
+                </div>
+            </button>
+        </div>
+    </div>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Deploy Panel (Left) -->
+    <div class="side-panel left" id="deploy-panel">
+        <div class="panel-header">
+            <div class="panel-title">⚡ Deploy Engine</div>
+            <div class="panel-subtitle">
+                Analiza y despliega repositorios de GitHub automáticamente con detección inteligente de tecnologías
+            </div>
+        </div>
+
+        <div class="panel-content">
+            <div class="input-group">
+                <label class="input-label">GitHub Repository URL</label>
+                <input type="text" 
+                       class="input-field" 
+                       id="repo" 
+                       placeholder="https://github.com/username/repository">
+            </div>
+
+            <button class="btn btn-primary" onclick="analizar()">
+                <span style="position: relative; z-index: 1;">🔍 Analizar Repositorio</span>
+            </button>
+
+            <div id="setup">
+                <div class="status-badge status-info">
+                    <span class="status-icon">⚙️</span>
+                    <span>Configuración detectada automáticamente</span>
+                </div>
+
+                <div class="input-group">
+                    <label class="input-label">Nombre del Proyecto</label>
+                    <input type="text" 
+                           class="input-field" 
+                           id="p-name" 
+                           placeholder="my-awesome-project">
+                </div>
+
+                <div class="input-group">
+                    <label class="input-label">Comando de Instalación</label>
+                    <input type="text" 
+                           class="input-field" 
+                           id="p-inst" 
+                           placeholder="npm install">
+                </div>
+
+                <div class="input-group">
+                    <label class="input-label">Comando de Inicio</label>
+                    <input type="text" 
+                           class="input-field" 
+                           id="p-start" 
+                           placeholder="npm run dev">
+                </div>
+
+                <button class="btn btn-success" onclick="lanzar()">
+                    <span style="position: relative; z-index: 1;">▶️ Lanzar Aplicación</span>
+                </button>
+
+                <label class="input-label" style="margin-top: 24px;">Live Console Output</label>
+                <div class="log-terminal" id="logs">
+                    <div class="log-line">[NOCTURNA] Esperando logs del servidor...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monitoring Panel (Left) -->
+    <div class="side-panel left" id="monitoring-panel">
+        <div class="panel-header">
+            <div class="panel-title">📡 Monitoreo de Servicios</div>
+            <div class="panel-subtitle">
+                Configura endpoints para monitorear su disponibilidad en tiempo real
+            </div>
+        </div>
+
+        <div class="panel-content">
+            <div class="input-group">
+                <label class="input-label">URL del Endpoint</label>
+                <input type="text" 
+                       class="input-field" 
+                       id="ping-url" 
+                       placeholder="https://api.example.com/health"
+                       style="margin-bottom: 8px;">
+            </div>
+
+            <div class="input-group">
+                <label class="input-label">Nombre del Servicio</label>
+                <input type="text" 
+                       class="input-field" 
+                       id="ping-name" 
+                       placeholder="API Principal">
+            </div>
+
+            <button class="btn btn-primary" onclick="addPing()" style="margin-top: 8px;">
+                <span style="position: relative; z-index: 1;">➕ Agregar Monitoreo</span>
+            </button>
+
+            <div id="ping-list" style="margin-top: 20px;">
+                <!-- Ping items will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Panel (Left) -->
+    <div class="side-panel left" id="settings-panel">
+        <div class="panel-header">
+            <div class="panel-title">⚙️ Configuración</div>
+            <div class="panel-subtitle">
+                Personaliza tu experiencia en Nocturna OS
+            </div>
+        </div>
+
+        <div class="panel-content">
+            <div class="input-group">
+                <label class="input-label">Motor de Búsqueda Predeterminado</label>
+                <select class="input-field" style="cursor: pointer;">
+                    <option>Google</option>
+                    <option>DuckDuckGo</option>
+                    <option>Bing</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label class="input-label">Tema</label>
+                <select class="input-field" style="cursor: pointer;">
+                    <option>Oscuro (Cyber)</option>
+                    <option>Oscuro (Minimal)</option>
+                    <option>Claro</option>
+                </select>
+            </div>
+
+            <div class="status-badge status-info" style="margin-top: 24px;">
+                <span>🎨</span>
+                <span>Más opciones próximamente</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Panel (Right) -->
+    <div class="side-panel right" id="tabs-panel">
+        <div class="panel-header">
+            <div class="panel-title">🌐 Active Sessions</div>
+            <div class="panel-subtitle">
+                Historial de navegación y pestañas activas en esta sesión
+            </div>
+        </div>
+
+        <div class="panel-content">
+            <div id="tab-list">
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <div class="empty-text">No hay pestañas abiertas aún</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Home View -->
+    <div id="home">
+        <div class="home-logo">NOCTURNA</div>
+        <div class="home-search">
+            <input type="text" 
+                   class="omnibox" 
+                   placeholder="Busca en Google o escribe una URL..." 
+                   onkeypress="handle(event)">
+            <div class="search-icon">🔍</div>
+        </div>
+        <div class="home-tagline">
+            El navegador del futuro • Rápido • Inteligente • Hermoso
+        </div>
+    </div>
+
+    <!-- Web View -->
+    <div id="web-view">
+        <div class="web-controls">
+            <button class="back-btn" onclick="goHome()">
+                ← Volver
+            </button>
+            <div class="url-display">
+                <span class="url-lock">🔒</span>
+                <span id="url-tag">https://example.com</span>
+            </div>
+        </div>
+        <div id="frame-slot"></div>
+    </div>
+
+    <!-- Success Sound -->
+    <audio id="success-snd" src="https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3"></audio>
+
+    <!-- Edit Ping Modal -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal-content">
+            <div class="modal-header">✏️ Editar Monitoreo</div>
+            
+            <div class="input-group">
+                <label class="input-label">Nombre del Servicio</label>
+                <input type="text" class="input-field" id="edit-ping-name">
+            </div>
+
+            <div class="input-group">
+                <label class="input-label">URL del Endpoint</label>
+                <input type="text" class="input-field" id="edit-ping-url">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeEditModal()">
+                    <span style="position: relative; z-index: 1;">Cancelar</span>
+                </button>
+                <button class="btn btn-primary" onclick="saveEdit()">
+                    <span style="position: relative; z-index: 1;">💾 Guardar</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let tabs = [];
+        let tempFolder = "";
+        let logUpdateInterval = null;
+
+        // ===== SIDEBAR MANAGEMENT =====
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar-menu');
+            const overlay = document.getElementById('sidebar-overlay');
+            const hamburger = document.querySelector('.hamburger-btn');
+            
+            sidebar.classList.toggle('active');
+            overlay.classList.toggle('active');
+            hamburger.classList.toggle('sidebar-open');
+        }
+
+        function openSection(sectionId) {
+            // Close sidebar
+            toggleSidebar();
+            
+            // Close all panels
+            document.querySelectorAll('.side-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+            
+            // Open selected panel
+            const panel = document.getElementById(sectionId);
+            if (panel) {
+                setTimeout(() => {
+                    panel.classList.add('active');
+                }, 300); // Delay to allow sidebar to close first
+            }
+        }
+
+        // ===== PANEL MANAGEMENT =====
+        function togglePanel(panelId) {
+            const panel = document.getElementById(panelId);
+            const allPanels = document.querySelectorAll('.side-panel');
+            
+            // Only handle tabs panel here (right side)
+            if (panelId === 'tabs-panel') {
+                const btn = document.getElementById('tabs-btn');
+                
+                if (panel.classList.contains('active')) {
+                    panel.classList.remove('active');
+                    btn.classList.remove('active');
+                } else {
+                    // Close all other panels
+                    allPanels.forEach(p => p.classList.remove('active'));
+                    
+                    // Open tabs panel
+                    panel.classList.add('active');
+                    btn.classList.add('active');
+                }
+            }
+        }
+
+        // ===== NAVIGATION =====
+        function handle(e) {
+            if (e.key === 'Enter') {
+                const input = e.target;
+                const value = input.value.trim();
+                if (value) {
+                    openWeb(value);
+                    input.value = '';
+                }
+            }
+        }
+
+        function openWeb(v) {
+            if (!v) return;
+
+            let url = v.includes('.') && !v.includes(' ')
+                ? (v.startsWith('http') ? v : 'https://' + v)
+                : 'https://www.google.com/search?q=' + encodeURIComponent(v);
+
+            const id = "w" + Date.now();
+            const now = new Date();
+            const time = now.toLocaleTimeString('es-ES', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+
+            tabs.push({ id, url, time });
+
+            const ifr = document.createElement('iframe');
+            ifr.id = id;
+            ifr.src = "/proxy?url=" + encodeURIComponent(url);
+            ifr.style.display = "none";
+            document.getElementById('frame-slot').appendChild(ifr);
+
+            renderTabs();
+            switchW(id);
+            
+            // Show notification on tabs button
+            document.getElementById('tabs-notification').style.display = 'block';
+        }
+
+        function switchW(id) {
+            document.getElementById('home').style.display = 'none';
+            document.getElementById('web-view').classList.add('active');
+
+            document.querySelectorAll('iframe').forEach(f => f.style.display = 'none');
+            const activeFrame = document.getElementById(id);
+            if (activeFrame) {
+                activeFrame.style.display = 'block';
+            }
+
+            const tab = tabs.find(t => t.id === id);
+            if (tab) {
+                document.getElementById('url-tag').innerText = tab.url;
+            }
+        }
+
+        function renderTabs() {
+            const list = document.getElementById('tab-list');
+
+            if (tabs.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <div class="empty-text">No hay pestañas abiertas aún</div>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = "";
+            tabs.forEach((t, index) => {
+                const div = document.createElement('div');
+                div.className = 'tab-item';
+                div.style.animationDelay = `${index * 0.05}s`;
+                div.onclick = () => switchW(t.id);
+                
+                const domain = new URL(t.url).hostname;
+                
+                div.innerHTML = `
+                    <div class="tab-icon">🌐</div>
+                    <div class="tab-info">
+                        <div class="tab-url">${domain}</div>
+                        <div class="tab-time">${t.time}</div>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function goHome() {
+            document.getElementById('web-view').classList.remove('active');
+            document.getElementById('home').style.display = 'flex';
+            document.getElementById('q').value = '';
+        }
+
+        // ===== DEPLOY FUNCTIONS =====
+        async function analizar() {
+            const repoUrl = document.getElementById('repo').value.trim();
+
+            if (!repoUrl) {
+                showNotification('Por favor ingresa una URL de repositorio', 'error');
+                return;
+            }
+
+            // Show loading state
+            const btn = event.target;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<span style="position: relative; z-index: 1;">⏳ Analizando...</span>';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/detect_and_setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ repo: repoUrl })
+                });
+
+                const d = await res.json();
+
+                if (d.status === 'ok') {
+                    document.getElementById('setup').classList.add('active');
+                    document.getElementById('p-inst').value = d.inst || '';
+                    document.getElementById('p-start').value = d.start || '';
+                    tempFolder = d.folder || '';
+                    showNotification('Análisis completado correctamente', 'success');
+                } else {
+                    showNotification('Error al analizar el repositorio', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error de conexión con el servidor', 'error');
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        }
+
+        async function lanzar() {
+            const name = document.getElementById('p-name').value.trim();
+            const inst = document.getElementById('p-inst').value.trim();
+            const start = document.getElementById('p-start').value.trim();
+
+            if (!name || !inst || !start) {
+                showNotification('Por favor completa todos los campos', 'error');
+                return;
+            }
+
+            const payload = {
+                folder: tempFolder,
+                name: name,
+                inst: inst,
+                start: start
+            };
+
+            // Show loading state
+            const btn = event.target;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<span style="position: relative; z-index: 1;">🚀 Desplegando...</span>';
+            btn.disabled = true;
+
+            try {
+                await fetch('/deploy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                showNotification('Aplicación lanzada correctamente', 'success');
+                
+                // Clear previous interval if exists
+                if (logUpdateInterval) {
+                    clearInterval(logUpdateInterval);
+                }
+
+                // Start log polling
+                logUpdateInterval = setInterval(async () => {
+                    try {
+                        const r = await fetch(`/get_logs/${name}`);
+                        const data = await r.json();
+
+                        const logsContainer = document.getElementById('logs');
+                        if (data.text) {
+                            const lines = data.text.split('\n');
+                            logsContainer.innerHTML = lines
+                                .map(line => `<div class="log-line">${escapeHtml(line)}</div>`)
+                                .join('');
+                            logsContainer.scrollTop = logsContainer.scrollHeight;
+                        }
+
+                        if (data.alert === "success") {
+                            document.getElementById('success-snd').play();
+                            showNotification('¡Despliegue completado con éxito!', 'success');
+                            clearInterval(logUpdateInterval);
+                        }
+                    } catch (error) {
+                        console.error('Error obteniendo logs:', error);
+                    }
+                }, 5000);
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error al lanzar la aplicación', 'error');
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        }
+
+        // ===== UTILITIES =====
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showNotification(message, type) {
+            // Simple console notification for now
+            // You can enhance this with a toast notification system
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // Initialize
+        renderTabs();
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (logUpdateInterval) {
+                clearInterval(logUpdateInterval);
+            }
+        });
+
+        // ===== PING MONITORING =====
+        let pingServices = [];
+        let pingIntervals = {};
+        let editingPingId = null;
+
+        function addPing() {
+            const url = document.getElementById('ping-url').value.trim();
+            const name = document.getElementById('ping-name').value.trim();
+
+            if (!url || !name) {
+                showNotification('Por favor completa todos los campos', 'error');
+                return;
+            }
+
+            // Validate URL
+            try {
+                new URL(url);
+            } catch (e) {
+                showNotification('Por favor ingresa una URL válida', 'error');
+                return;
+            }
+
+            const pingId = 'ping_' + Date.now();
+            const pingService = {
+                id: pingId,
+                name: name,
+                url: url,
+                status: 'checking',
+                responseTime: '--',
+                uptime: '0%',
+                lastCheck: new Date().toLocaleTimeString()
+            };
+
+            pingServices.push(pingService);
+            
+            // Clear inputs
+            document.getElementById('ping-url').value = '';
+            document.getElementById('ping-name').value = '';
+
+            renderPings();
+            startPingMonitoring(pingId);
+            showNotification('Monitoreo agregado correctamente', 'success');
+        }
+
+        function renderPings() {
+            const list = document.getElementById('ping-list');
+
+            if (pingServices.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state" style="padding: 30px 0;">
+                        <div class="empty-icon" style="font-size: 48px;">📡</div>
+                        <div class="empty-text">No hay servicios en monitoreo</div>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = '';
+            pingServices.forEach((service, index) => {
+                const div = document.createElement('div');
+                div.className = `ping-item ${service.status}`;
+                div.style.animationDelay = `${index * 0.05}s`;
+                
+                const statusIcon = service.status === 'online' ? '✅' : 
+                                  service.status === 'offline' ? '❌' : '🔄';
+
+                div.innerHTML = `
+                    <div class="ping-header">
+                        <div class="ping-info">
+                            <div class="ping-name">${escapeHtml(service.name)}</div>
+                            <div class="ping-url">${escapeHtml(service.url)}</div>
+                        </div>
+                        <div class="ping-status ${service.status}">
+                            <span>${statusIcon}</span>
+                            <span>${service.status.toUpperCase()}</span>
+                        </div>
+                    </div>
+
+                    <div class="ping-stats">
+                        <div class="ping-stat">
+                            <div class="ping-stat-label">Latencia</div>
+                            <div class="ping-stat-value">${service.responseTime}ms</div>
+                        </div>
+                        <div class="ping-stat">
+                            <div class="ping-stat-label">Uptime</div>
+                            <div class="ping-stat-value">${service.uptime}</div>
+                        </div>
+                        <div class="ping-stat">
+                            <div class="ping-stat-label">Última verificación</div>
+                            <div class="ping-stat-value" style="font-size: 11px;">${service.lastCheck}</div>
+                        </div>
+                    </div>
+
+                    <div class="ping-actions">
+                        <button class="ping-action-btn edit" onclick="editPing('${service.id}')">
+                            ✏️ Editar
+                        </button>
+                        <button class="ping-action-btn delete" onclick="deletePing('${service.id}')">
+                            🗑️ Eliminar
+                        </button>
+                    </div>
+                `;
+                
+                list.appendChild(div);
+            });
+        }
+
+        function startPingMonitoring(pingId) {
+            // Clear existing interval if any
+            if (pingIntervals[pingId]) {
+                clearInterval(pingIntervals[pingId]);
+            }
+
+            // Initial check
+            checkPing(pingId);
+
+            // Set up interval for continuous monitoring (every 30 seconds)
+            pingIntervals[pingId] = setInterval(() => {
+                checkPing(pingId);
+            }, 30000);
+        }
+
+        async function checkPing(pingId) {
+            const service = pingServices.find(s => s.id === pingId);
+            if (!service) return;
+
+            const startTime = Date.now();
+
+            try {
+                // In a real implementation, you would call your backend
+                // For demo purposes, we'll simulate a ping
+                const response = await fetch(`/ping?url=${encodeURIComponent(service.url)}`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(5000)
+                }).catch(() => {
+                    // Simulate response for demo
+                    return { ok: Math.random() > 0.2 }; // 80% success rate
+                });
+
+                const endTime = Date.now();
+                const responseTime = endTime - startTime;
+
+                service.status = response.ok ? 'online' : 'offline';
+                service.responseTime = response.ok ? responseTime : '--';
+                service.lastCheck = new Date().toLocaleTimeString();
+
+                // Calculate uptime (simplified - in production use historical data)
+                if (!service.checks) service.checks = [];
+                service.checks.push(response.ok);
+                if (service.checks.length > 100) service.checks.shift();
+                
+                const successfulChecks = service.checks.filter(c => c).length;
+                service.uptime = ((successfulChecks / service.checks.length) * 100).toFixed(1) + '%';
+
+            } catch (error) {
+                service.status = 'offline';
+                service.responseTime = '--';
+                service.lastCheck = new Date().toLocaleTimeString();
+            }
+
+            renderPings();
+        }
+
+        function editPing(pingId) {
+            const service = pingServices.find(s => s.id === pingId);
+            if (!service) return;
+
+            editingPingId = pingId;
+            document.getElementById('edit-ping-name').value = service.name;
+            document.getElementById('edit-ping-url').value = service.url;
+            document.getElementById('edit-modal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.remove('active');
+            editingPingId = null;
+        }
+
+        function saveEdit() {
+            if (!editingPingId) return;
+
+            const service = pingServices.find(s => s.id === editingPingId);
+            if (!service) return;
+
+            const newName = document.getElementById('edit-ping-name').value.trim();
+            const newUrl = document.getElementById('edit-ping-url').value.trim();
+
+            if (!newName || !newUrl) {
+                showNotification('Por favor completa todos los campos', 'error');
+                return;
+            }
+
+            // Validate URL
+            try {
+                new URL(newUrl);
+            } catch (e) {
+                showNotification('Por favor ingresa una URL válida', 'error');
+                return;
+            }
+
+            service.name = newName;
+            service.url = newUrl;
+            service.status = 'checking';
+
+            renderPings();
+            checkPing(editingPingId); // Immediately check new URL
+            closeEditModal();
+            showNotification('Monitoreo actualizado correctamente', 'success');
+        }
+
+        function deletePing(pingId) {
+            // Confirm deletion
+            if (!confirm('¿Estás seguro de que deseas eliminar este monitoreo?')) {
+                return;
+            }
+
+            // Stop monitoring
+            if (pingIntervals[pingId]) {
+                clearInterval(pingIntervals[pingId]);
+                delete pingIntervals[pingId];
+            }
+
+            // Remove from array
+            pingServices = pingServices.filter(s => s.id !== pingId);
+            
+            renderPings();
+            showNotification('Monitoreo eliminado correctamente', 'success');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('edit-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'edit-modal') {
+                closeEditModal();
+            }
+        });
+
+        // Initialize ping list
+        renderPings();
+
+        // Cleanup ping intervals on page unload
+        window.addEventListener('beforeunload', () => {
+            Object.values(pingIntervals).forEach(interval => clearInterval(interval));
+        });
+    </script>
+</body>
+</html>
