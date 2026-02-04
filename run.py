@@ -599,8 +599,7 @@ def proxy():
             </div>
         </body>
         </html>
-        """, 504
-        
+        """, 504    
     except requests.TooManyRedirects:
     return f"""
         <!DOCTYPE html>
