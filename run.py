@@ -601,7 +601,7 @@ def proxy():
         </html>
         """, 504 
         
-    except requests.TooManyRedirects:
+        except requests.TooManyRedirects:
     return f"""
         <!DOCTYPE html>
         <html>
