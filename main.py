@@ -7,7 +7,7 @@ from downloader import download_apk
 from patcher import apply_patches
 
 # --- CONFIGURACIÓN ---
-TOKEN = "TU_TOKEN_AQUI"
+TOKEN = "8530157577:AAFV3q3X7W3lhNZi_tevNkWZUX8-9SUGVoQ"
 BRANDING = "app.daikel ⚡"
 SIGN_NAME = "GhostProtocol"
 
