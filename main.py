@@ -1,101 +1,54 @@
-import os
+import telebot
 import subprocess
-import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
-from downloader import download_apk
-from patcher import apply_patches
+import re
+import os
+import json
 
-# --- CONFIGURACIÓN ---
-TOKEN = "8530157577:AAFV3q3X7W3lhNZi_tevNkWZUX8-9SUGVoQ"
-BRANDING = "app.daikel ⚡"
-SIGN_NAME = "GhostProtocol"
+TOKEN = "8530157577:AAFV3q3X7W3lhNZi_tevNkWZUX8-9SUGVoQ"  # Lo dejas como está
+bot = telebot.TeleBot(TOKEN)
 
-def preparar_entorno():
-    """Genera la firma y carpetas si no existen"""
-    for d in ["downloads", "workdir", "output"]:
-        os.makedirs(d, exist_ok=True)
-    
-    if not os.path.exists("key.jks"):
-        print("Generando firma GhostProtocol...")
-        cmd = (
-            'keytool -genkey -v -keystore key.jks -keyalg RSA -keysize 2048 '
-            '-validity 10000 -alias ghost -storepass 123456 -keypass 123456 '
-            '-dname "CN=GhostProtocol, O=Daikel, C=US"'
-        )
-        subprocess.run(cmd, shell=True)
-
-# Ejecutar preparación
-preparar_entorno()
-
+# Estado por usuario: esperando URL o no
 user_data = {}
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"💀 **{SIGN_NAME} Activo**\nEnvía un link de Play Store.")
+def is_valid_playstore_url(url):
+    return re.match(r'^https?://play\.google\.com/store/apps/details\?id=.*', url)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.message.from_user.id
-    if "play.google.com" in update.message.text:
-        user_data[uid] = {"url": update.message.text.split()[0]}
-        buttons = [
-            [InlineKeyboardButton("🔓 Premium / Paga Gratis", callback_data='mod_premium')],
-            [InlineKeyboardButton("🚫 Quitar Anuncios", callback_data='mod_ads')],
-            [InlineKeyboardButton("✍️ Personalizar", callback_data='mod_custom')]
-        ]
-        await update.message.reply_text("¿Qué acción deseas aplicar?", reply_markup=InlineKeyboardMarkup(buttons))
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "Envíame una URL de Google Play y te devolveré el APK modificado.")
+    user_data[message.chat.id] = {'step': 'waiting_url'}
 
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    uid = query.from_user.id
-    await query.answer()
+@bot.message_handler(func=lambda msg: user_data.get(msg.chat.id, {}).get('step') == 'waiting_url')
+def handle_url(message):
+    url = message.text.strip()
+    if not is_valid_playstore_url(url):
+        bot.reply_to(message, "URL no válida. Debe ser de play.google.com/store/apps/details?id=...")
+        return
 
-    if query.data == 'mod_custom':
-        user_data[uid]["waiting_desc"] = True
-        await query.edit_message_text("✍️ Dime qué quieres que haga la app:")
-    else:
-        user_data[uid]["desc"] = query.data
-        await run_engine(query, context, uid)
+    bot.reply_to(message, "Procesando... puede tardar unos minutos.")
+    try:
+        # Ejecutar downloader.py con la URL como argumento (sin shell=True)
+        result = subprocess.run(
+            ['python3', 'downloader.py', url],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        if result.returncode != 0:
+            bot.reply_to(message, f"Error interno: {result.stderr}")
+        else:
+            # Se espera que downloader.py genere un archivo .apk en cierta ruta
+            apk_path = "modificado.apk"  # Ajusta según lo que genere downloader.py
+            if os.path.exists(apk_path):
+                with open(apk_path, 'rb') as f:
+                    bot.send_document(message.chat.id, f)
+            else:
+                bot.reply_to(message, "No se generó el APK.")
+    except subprocess.TimeoutExpired:
+        bot.reply_to(message, "Tiempo de espera agotado.")
+    except Exception as e:
+        bot.reply_to(message, f"Error inesperado: {str(e)}")
+    finally:
+        user_data.pop(message.chat.id, None)  # Limpiar estado
 
-async def run_engine(update, context, uid):
-    data = user_data[uid]
-    desc_txt = data.get("desc", "Mod General")
-    
-    status = await (update.message.reply_text if hasattr(update, 'message') else update.edit_message_text)(
-        f"⚙️ **GhostProtocol trabajando...**\n`Mod: {desc_txt}`"
-    )
-
-    # 1. Descargar
-    path = download_apk(data["url"])
-    if not path:
-        return await context.bot.send_message(uid, "❌ Error al descargar.")
-
-    # 2. Modding (Descompilar -> Parchear -> Reconstruir)
-    work = f"workdir/{uid}"
-    final = f"output/Ghost_{uid}.apk"
-    
-    subprocess.run(f"apktool d {path} -o {work} -f", shell=True)
-    apply_patches(work, desc_txt)
-    subprocess.run(f"apktool b {work} -o {final}", shell=True)
-    
-    # 3. Firmar
-    sign_cmd = f"apksigner sign --ks key.jks --ks-pass pass:123456 --out {final} {final}"
-    subprocess.run(sign_cmd, shell=True)
-
-    # 4. Enviar
-    await context.bot.send_document(
-        chat_id=uid,
-        document=open(final, "rb"),
-        caption=f"✅ **Listo por GhostProtocol**\nFirma: {BRANDING}"
-    )
-    # Limpieza
-    if os.path.exists(final): os.remove(final)
-
-def main():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(CallbackQueryHandler(callback_handler))
-    app.run_polling()
-
-if __name__ == '__main__':
-    main()                  
+bot.infinity_polling()
