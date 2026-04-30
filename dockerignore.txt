@@ -1,0 +1,52 @@
+# ── Control de versiones ──────────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+
+# ── Archivos sensibles de NexHost ─────────────────────────────────────────
+# Tokens, proyectos desplegados y configuracion — nunca dentro de la imagen
+**/config.json
+**/projects.json
+**/*.history.json
+.env
+.env.*
+
+# ── Logs y datos de runtime ───────────────────────────────────────────────
+**/*.log
+**/logs/
+data/
+.nexhost/
+
+# ── Dockerfile temporal generado por docker_manager.py ────────────────────
+**/.nexhost.Dockerfile
+
+# ── Entornos y caches Python ──────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.cache/
+
+# ── Herramientas de desarrollo ────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Tests ─────────────────────────────────────────────────────────────────
+tests/
+test_*.py
+*_test.py
+.pytest_cache/
+.coverage
+htmlcov/
