@@ -1,3 +1,0 @@
-python-telegram-bot
-gpapi
-google-play-scraper
