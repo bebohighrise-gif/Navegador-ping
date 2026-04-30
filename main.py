@@ -3329,7 +3329,50 @@ class Handler(BaseHTTPRequestHandler):
             safe["gh_token_preview"] = ("***" + cur["gh_token"][-4:]) if cur.get("gh_token") else ""
             return self.send_json(safe)
 
-        # ── Listado de usuarios (sólo admin) ────────────────────────────────
+        # ── Estadísticas globales (sólo admin) ──────────────────────────────
+        if path == "/api/admin/stats":
+            cur, ok = _require_admin(self)
+            if not ok:
+                return self.send_json({"error": "Sólo admin"}, 403)
+            users = load_users()
+            projs = load_projects()
+            now = time.time()
+            running_now = 0
+            for p in projs:
+                with registry_lock:
+                    info = registry.get(p["id"], {})
+                live = info.get("proc")
+                if live and live.poll() is None:
+                    running_now += 1
+            with_email   = sum(1 for u in users if (u.get("email") or "").strip() and "@" in (u.get("email") or ""))
+            active_30d   = sum(1 for u in users if (now - (u.get("last_login", 0) or 0)) < 30 * 86400)
+            banned_perm  = sum(1 for u in users if u.get("banned_until", 0) == -1)
+            banned_temp  = sum(1 for u in users if (u.get("banned_until", 0) or 0) > now)
+            with_gh_tok  = sum(1 for u in users if u.get("gh_token"))
+            return self.send_json({
+                "users": {
+                    "total":       len(users),
+                    "with_email":  with_email,
+                    "active_30d":  active_30d,
+                    "banned_perm": banned_perm,
+                    "banned_temp": banned_temp,
+                    "with_gh_token": with_gh_tok,
+                },
+                "projects": {
+                    "total":   len(projs),
+                    "running": running_now,
+                    "stopped": len(projs) - running_now,
+                },
+                "services": {
+                    "sendgrid":   SENDGRID_ENABLED,
+                    "google_oauth": GOOGLE_OAUTH_ENABLED,
+                    "turnstile":  CF_TURNSTILE_ENABLED,
+                    "engine":     "uv" if UV else "pip",
+                    "mise":       bool(_MISE),
+                },
+                "server_time": int(now),
+            })
+
         if path == "/api/admin/users":
             cur, ok = _require_admin(self)
             if not ok:
@@ -3948,6 +3991,86 @@ class Handler(BaseHTTPRequestHandler):
             users = [u for u in users if u.get("id") != uid]
             save_users(users)
             return self.send_json({"ok": True, "deleted_projects": len(user_projs)})
+
+        # ── ADMIN: Broadcast email a todos los usuarios ─────────────────────
+        if path == "/api/admin/broadcast":
+            cur, ok = _require_admin(self)
+            if not ok:
+                return self.send_json({"error": "Sólo admin"}, 403)
+            if not SENDGRID_ENABLED:
+                return self.send_json({"error": "SendGrid no configurado (falta SENDGRID_API_KEY)"}, 400)
+            subject  = (body.get("subject") or "").strip()
+            message  = (body.get("message") or "").strip()
+            audience = body.get("audience", "all")  # "all" | "active" | "admins"
+            if not subject or not message:
+                return self.send_json({"error": "Subject y mensaje son obligatorios"}, 400)
+            if len(subject) > 200:
+                return self.send_json({"error": "Subject demasiado largo (máx 200)"}, 400)
+            if len(message) > 20000:
+                return self.send_json({"error": "Mensaje demasiado largo (máx 20.000 caracteres)"}, 400)
+
+            users = load_users()
+            now = time.time()
+            recipients = []
+            for u in users:
+                em = (u.get("email") or "").strip()
+                if not em or "@" not in em:
+                    continue
+                # Excluir baneados permanentes
+                bu = u.get("banned_until", 0)
+                if bu == -1:
+                    continue
+                if audience == "active":
+                    # Activos = login en los últimos 30 días
+                    if (now - (u.get("last_login", 0) or 0)) > 30 * 86400:
+                        continue
+                elif audience == "admins":
+                    if u.get("role") != "admin":
+                        continue
+                recipients.append(u)
+
+            if not recipients:
+                return self.send_json({"error": "No hay destinatarios que coincidan", "sent": 0}, 400)
+
+            safe_msg_html = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+            sender_name = cur.get("username", "admin")
+
+            def _send_all(recip_list, subj, msg_html, msg_txt, sender):
+                sent_ok = 0
+                for u in recip_list:
+                    try:
+                        html = f"""<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;background:#0a0a14;color:#e8e8f0;padding:24px;margin:0">
+<div style="max-width:560px;margin:0 auto;background:#10101c;border:1px solid #2a2a44;border-radius:14px;overflow:hidden">
+  <div style="padding:18px 22px;background:#0a1a2a;border-bottom:1px solid #1a3a4a">
+    <h2 style="margin:0;color:#00f5a0;font-size:18px">📢 NexHost — Mensaje del equipo</h2>
+  </div>
+  <div style="padding:22px">
+    <p style="color:#c0c0d8;margin:0 0 14px">Hola <strong>{u.get('username','')}</strong>,</p>
+    <div style="color:#e8e8f0;line-height:1.6;font-size:14px;margin:0 0 18px">{msg_html}</div>
+    <p style="color:#80809a;font-size:11px;margin:24px 0 0;line-height:1.5">— {sender}, equipo NexHost</p>
+  </div>
+  <div style="padding:14px 22px;background:#0a0a14;border-top:1px solid #2a2a44;color:#50506a;font-size:11px;font-family:monospace">
+    NexHost · comunicación oficial · puedes desactivar emails en tu perfil
+  </div>
+</div>
+</body></html>"""
+                        if send_email(u["email"], f"[NexHost] {subj}", html, msg_txt):
+                            sent_ok += 1
+                        time.sleep(0.05)  # throttle ligero para no saturar SendGrid
+                    except Exception as e:
+                        print(f"[nexhost] ⚠ broadcast a {u.get('email','?')} falló: {e}")
+                print(f"[nexhost] 📢 Broadcast completado: {sent_ok}/{len(recip_list)} enviados")
+
+            threading.Thread(
+                target=_send_all,
+                args=(recipients, subject, safe_msg_html, message, sender_name),
+                daemon=True,
+            ).start()
+            return self.send_json({
+                "ok": True,
+                "queued": len(recipients),
+                "audience": audience,
+            })
 
         if path == "/api/env":
             pid = body.get("id", "")

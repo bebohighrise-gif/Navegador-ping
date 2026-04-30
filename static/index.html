@@ -1748,6 +1748,17 @@ a:hover{opacity:.75}
 
   <div class="layout">
     <main class="content">
+      <!-- Banner persistente: conectar GitHub -->
+      <div id="gh-connect-banner" style="display:none;background:linear-gradient(90deg,rgba(168,85,247,.12),rgba(0,245,160,.08));border-bottom:1px solid rgba(0,245,160,.25);padding:10px 18px;align-items:center;gap:14px;font-family:var(--mono,monospace);font-size:12px;color:var(--t1);flex-shrink:0">
+        <span style="font-size:18px;line-height:1">⎇</span>
+        <div style="flex:1;line-height:1.5">
+          <strong style="color:var(--ac)">Conecta tu cuenta de GitHub</strong>
+          <span style="color:var(--t3)">— necesario para clonar y desplegar tus repositorios privados.</span>
+        </div>
+        <button onclick="openGhConnectModal()" class="btn btn-p sm" style="white-space:nowrap;padding:6px 14px;font-size:11px">Conectar GitHub →</button>
+        <button onclick="dismissGhBanner()" title="Ocultar" style="background:transparent;border:none;color:var(--t3);font-size:18px;cursor:pointer;padding:0 4px;line-height:1" aria-label="Cerrar">×</button>
+      </div>
+
       <!-- DASHBOARD -->
       <div class="view on" id="view-dashboard"><div class="dash-scroll" id="dash-content"></div></div>
 
@@ -2241,7 +2252,8 @@ async function init(){
   }catch(e){}
   // Siempre mostrar la app (GH token es opcional)
   showApp();
-  // Aviso amistoso si falta token de GitHub para este usuario
+  // Banner persistente + toast si falta token de GitHub para este usuario
+  refreshGhBanner();
   if(NEEDS_GH_TOKEN){
     setTimeout(()=>{
       try{
@@ -2249,6 +2261,29 @@ async function init(){
       }catch(_){}
     }, 1400);
   }
+}
+
+function refreshGhBanner(){
+  const el = document.getElementById('gh-connect-banner');
+  if(!el) return;
+  // Sólo mostrar si: el usuario NO tiene token propio, y no se ha ocultado en esta sesión
+  const dismissed = sessionStorage.getItem('nx_gh_banner_off') === '1';
+  const show = NEEDS_GH_TOKEN && !dismissed;
+  el.style.display = show ? 'flex' : 'none';
+}
+
+function dismissGhBanner(){
+  sessionStorage.setItem('nx_gh_banner_off', '1');
+  const el = document.getElementById('gh-connect-banner');
+  if(el) el.style.display = 'none';
+}
+
+function openGhConnectModal(){
+  // Reutiliza el modal de token existente (token-modal). Si no, lleva al panel deploy.
+  const modal = document.getElementById('token-modal');
+  if(modal){ openTokenModal(); return; }
+  goView('deploy', null);
+  setTimeout(()=>{ if(typeof dpTab==='function') dpTab('gh'); }, 200);
 }
 
 async function showApp(){
@@ -2336,6 +2371,9 @@ async function saveNewToken(){
     await fetch(authUrl('/api/config/gh-token'),{method:'POST',headers:authHeaders(),body:JSON.stringify({token:t})});
     localStorage.setItem('nh_token',t);
     GH_TOKEN=t;
+    NEEDS_GH_TOKEN=false;
+    sessionStorage.removeItem('nx_gh_banner_off');
+    refreshGhBanner();
     document.getElementById('new-token-inp').value='';
     closeModal('token-modal');
     toast('Token actualizado y guardado permanentemente ✓','g');
@@ -2575,6 +2613,9 @@ async function saveGhTokenAndGo(){
   if(!t) return toast('Ingresa tu token','r');
   await fetch(authUrl('/api/config/gh-token'),{method:'POST',headers:authHeaders(),body:JSON.stringify({token:t})});
   GH_TOKEN='__server__';
+  NEEDS_GH_TOKEN=false;
+  sessionStorage.removeItem('nx_gh_banner_off');
+  if(typeof refreshGhBanner==='function') refreshGhBanner();
   toast('Token guardado ✓','g');
   setTimeout(()=>{loadUser();loadRepos();goView('github',null);},400);
 }
@@ -4052,30 +4093,222 @@ async function openAdminPanel(){
     m=document.createElement('div');
     m.className='overlay'; m.id='admin-modal';
     m.innerHTML=`
-      <div class="modal" style="max-width:920px">
+      <div class="modal" style="max-width:960px">
         <div class="modal-hdr">
           <div class="modal-title">🛡 Panel de Administración</div>
           <span class="modal-x" onclick="closeModal('admin-modal')">✕</span>
         </div>
-        <div class="modal-body">
-          <div id="admin-stats" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-            <div class="chip" style="background:rgba(0,245,160,.08);border:1px solid rgba(0,245,160,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:var(--ac)" id="ad-st-users">— usuarios</div>
-            <div class="chip" style="background:rgba(68,136,255,.08);border:1px solid rgba(68,136,255,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:#9bb8ff" id="ad-st-projs">— proyectos</div>
-            <div class="chip" style="background:rgba(255,190,46,.08);border:1px solid rgba(255,190,46,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:var(--amber)" id="ad-st-run">— corriendo</div>
+        <div class="modal-body" style="padding-top:8px">
+          <!-- Tabs -->
+          <div style="display:flex;gap:4px;border-bottom:1px solid var(--b2);margin:0 -16px 14px;padding:0 16px">
+            <button id="adm-tab-users" onclick="adminTab('users')" class="adm-tab on" style="background:transparent;border:none;color:var(--t1);padding:10px 14px;font-size:12px;font-family:var(--mono,monospace);cursor:pointer;border-bottom:2px solid var(--ac)">👥 Usuarios</button>
+            <button id="adm-tab-broadcast" onclick="adminTab('broadcast')" class="adm-tab" style="background:transparent;border:none;color:var(--t3);padding:10px 14px;font-size:12px;font-family:var(--mono,monospace);cursor:pointer;border-bottom:2px solid transparent">📢 Email masivo</button>
+            <button id="adm-tab-stats" onclick="adminTab('stats')" class="adm-tab" style="background:transparent;border:none;color:var(--t3);padding:10px 14px;font-size:12px;font-family:var(--mono,monospace);cursor:pointer;border-bottom:2px solid transparent">📊 Estado</button>
           </div>
-          <div id="admin-userlist" style="border:1px solid rgba(255,255,255,.06);border-radius:8px;max-height:480px;overflow:auto">
-            <div style="padding:30px;text-align:center;color:var(--t3);font-family:var(--mono,monospace);font-size:11px">Cargando usuarios...</div>
+
+          <!-- Tab: Users -->
+          <div id="adm-pane-users">
+            <div id="admin-stats" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+              <div class="chip" style="background:rgba(0,245,160,.08);border:1px solid rgba(0,245,160,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:var(--ac)" id="ad-st-users">— usuarios</div>
+              <div class="chip" style="background:rgba(68,136,255,.08);border:1px solid rgba(68,136,255,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:#9bb8ff" id="ad-st-projs">— proyectos</div>
+              <div class="chip" style="background:rgba(255,190,46,.08);border:1px solid rgba(255,190,46,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:var(--amber)" id="ad-st-run">— corriendo</div>
+            </div>
+            <div id="admin-userlist" style="border:1px solid rgba(255,255,255,.06);border-radius:8px;max-height:460px;overflow:auto">
+              <div style="padding:30px;text-align:center;color:var(--t3);font-family:var(--mono,monospace);font-size:11px">Cargando usuarios...</div>
+            </div>
+          </div>
+
+          <!-- Tab: Broadcast -->
+          <div id="adm-pane-broadcast" style="display:none">
+            <div id="adm-bc-status" style="margin-bottom:12px;padding:10px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);background:rgba(255,190,46,.06);border:1px solid rgba(255,190,46,.2);color:var(--amber)">Verificando SendGrid...</div>
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <label style="flex:1">
+                <div style="font-size:10px;color:var(--t3);margin-bottom:4px;font-family:var(--mono,monospace);letter-spacing:.05em">DESTINATARIOS</div>
+                <select id="adm-bc-aud" class="inp" style="margin-bottom:0">
+                  <option value="all">Todos los usuarios con email</option>
+                  <option value="active">Solo activos (login últimos 30 días)</option>
+                  <option value="admins">Solo admins</option>
+                </select>
+              </label>
+              <div style="flex:1">
+                <div style="font-size:10px;color:var(--t3);margin-bottom:4px;font-family:var(--mono,monospace);letter-spacing:.05em">DESTINATARIOS ESTIMADOS</div>
+                <div id="adm-bc-count" style="padding:9px 12px;background:var(--s4);border:1px solid var(--b2);border-radius:6px;font-family:var(--mono,monospace);font-size:13px;color:var(--ac)">—</div>
+              </div>
+            </div>
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;color:var(--t3);margin-bottom:4px;font-family:var(--mono,monospace);letter-spacing:.05em">ASUNTO</div>
+              <input id="adm-bc-subj" class="inp" placeholder="Asunto del email (ej. Mantenimiento programado)" maxlength="200" style="margin-bottom:0">
+            </div>
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;color:var(--t3);margin-bottom:4px;font-family:var(--mono,monospace);letter-spacing:.05em">MENSAJE</div>
+              <textarea id="adm-bc-msg" class="inp" placeholder="Escribe aquí el mensaje. Los saltos de línea se respetan." rows="8" maxlength="20000" style="margin-bottom:0;resize:vertical;min-height:140px;font-family:inherit"></textarea>
+              <div style="font-size:10px;color:var(--t3);margin-top:4px;text-align:right;font-family:var(--mono,monospace)"><span id="adm-bc-len">0</span> / 20000</div>
+            </div>
+            <div style="background:rgba(0,0,0,.2);border:1px dashed var(--b2);border-radius:6px;padding:10px 12px;font-size:11px;color:var(--t3);margin-bottom:12px;line-height:1.5">
+              ⚠ El email se enviará desde <strong style="color:var(--t2)" id="adm-bc-from">noreply@nexhost.app</strong>. Los usuarios pueden desactivar emails desde su perfil — esos también recibirán este mensaje (es comunicación oficial). Excluye baneados permanentes.
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-g" onclick="adminBroadcastPreview()">👁 Previsualizar destinatarios</button>
+              <button id="adm-bc-send" class="btn btn-p" onclick="adminBroadcastSend()">📤 Enviar email a todos</button>
+            </div>
+          </div>
+
+          <!-- Tab: Stats -->
+          <div id="adm-pane-stats" style="display:none">
+            <div id="adm-stats-body" style="font-family:var(--mono,monospace);font-size:12px;color:var(--t2)">
+              <div style="padding:30px;text-align:center;color:var(--t3)">Cargando estado del sistema...</div>
+            </div>
           </div>
         </div>
         <div class="modal-foot">
-          <button class="btn btn-g" onclick="loadAdminUsers()">↻ Recargar</button>
+          <button class="btn btn-g" id="adm-reload-btn" onclick="adminReloadCurrent()">↻ Recargar</button>
           <button class="btn btn-g" onclick="closeModal('admin-modal')">Cerrar</button>
         </div>
       </div>`;
     document.body.appendChild(m);
+    // Listener para contador de mensaje
+    setTimeout(()=>{
+      const t=document.getElementById('adm-bc-msg');
+      if(t) t.addEventListener('input',()=>{ const l=document.getElementById('adm-bc-len'); if(l) l.textContent=t.value.length; });
+      const sel=document.getElementById('adm-bc-aud');
+      if(sel) sel.addEventListener('change', adminBroadcastPreview);
+    },50);
   }
   openModal('admin-modal');
-  loadAdminUsers();
+  window._admCurrentTab = window._admCurrentTab || 'users';
+  adminTab(window._admCurrentTab);
+}
+
+function adminTab(name){
+  window._admCurrentTab = name;
+  for(const t of ['users','broadcast','stats']){
+    const tab=document.getElementById('adm-tab-'+t);
+    const pane=document.getElementById('adm-pane-'+t);
+    if(tab){
+      if(t===name){ tab.style.color='var(--t1)'; tab.style.borderBottomColor='var(--ac)'; tab.classList.add('on'); }
+      else { tab.style.color='var(--t3)'; tab.style.borderBottomColor='transparent'; tab.classList.remove('on'); }
+    }
+    if(pane) pane.style.display = (t===name?'block':'none');
+  }
+  if(name==='users') loadAdminUsers();
+  else if(name==='broadcast') adminBroadcastInit();
+  else if(name==='stats') loadAdminStats();
+}
+
+function adminReloadCurrent(){
+  const t = window._admCurrentTab || 'users';
+  if(t==='users') loadAdminUsers();
+  else if(t==='broadcast') adminBroadcastPreview();
+  else if(t==='stats') loadAdminStats();
+}
+
+async function adminBroadcastInit(){
+  // Estado de SendGrid
+  try{
+    const cfg = await fetch(authUrl('/api/config'),{headers:authHeaders()}).then(r=>r.json());
+    const st  = document.getElementById('adm-bc-status');
+    const btn = document.getElementById('adm-bc-send');
+    if(cfg.sendgrid){
+      st.style.background='rgba(0,245,160,.06)'; st.style.borderColor='rgba(0,245,160,.2)'; st.style.color='var(--ac)';
+      st.textContent='✓ SendGrid activo — listo para enviar';
+      if(btn){ btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; }
+    } else {
+      st.style.background='rgba(255,62,90,.06)'; st.style.borderColor='rgba(255,62,90,.2)'; st.style.color='var(--red)';
+      st.textContent='✕ SendGrid no configurado — añade SENDGRID_API_KEY en los secrets para enviar emails';
+      if(btn){ btn.disabled=true; btn.style.opacity='.5'; btn.style.cursor='not-allowed'; }
+    }
+  }catch(e){}
+  adminBroadcastPreview();
+}
+
+async function adminBroadcastPreview(){
+  const aud = document.getElementById('adm-bc-aud').value;
+  try{
+    const r = await fetch(authUrl('/api/admin/users'),{headers:authHeaders()});
+    if(!r.ok) return;
+    const d = await r.json();
+    const now = Math.floor(Date.now()/1000);
+    let n = 0;
+    for(const u of (d.users||[])){
+      if(!u.email || u.email.indexOf('@')<0) continue;
+      if(u.ban==='perm') continue;
+      if(aud==='active'){
+        if(!u.last_login || (now - u.last_login) > 30*86400) continue;
+      } else if(aud==='admins'){
+        if(u.role!=='admin') continue;
+      }
+      n++;
+    }
+    const cEl = document.getElementById('adm-bc-count');
+    if(cEl) cEl.textContent = n + (n===1?' destinatario':' destinatarios');
+  }catch(e){}
+}
+
+async function adminBroadcastSend(){
+  const subj = document.getElementById('adm-bc-subj').value.trim();
+  const msg  = document.getElementById('adm-bc-msg').value.trim();
+  const aud  = document.getElementById('adm-bc-aud').value;
+  if(!subj){ toast('Falta el asunto','r'); return; }
+  if(!msg){ toast('Falta el mensaje','r'); return; }
+  if(!confirm(`¿Enviar este email a los destinatarios "${aud}"?\n\nAsunto: ${subj}\n\nEsta acción no se puede deshacer.`)) return;
+  const btn = document.getElementById('adm-bc-send');
+  if(btn){ btn.disabled=true; btn.textContent='Enviando...'; }
+  try{
+    const r = await fetch(authUrl('/api/admin/broadcast'),{
+      method:'POST', headers:authHeaders(),
+      body: JSON.stringify({subject:subj, message:msg, audience:aud})
+    });
+    const d = await r.json();
+    if(r.ok){
+      toast(`📤 Email encolado para ${d.queued} destinatarios ✓`,'g',6000);
+      document.getElementById('adm-bc-subj').value='';
+      document.getElementById('adm-bc-msg').value='';
+      const l=document.getElementById('adm-bc-len'); if(l) l.textContent='0';
+    } else {
+      toast('Error: '+(d.error||'falló el envío'),'r');
+    }
+  }catch(e){ toast('Error: '+e.message,'r'); }
+  if(btn){ btn.disabled=false; btn.textContent='📤 Enviar email a todos'; }
+}
+
+async function loadAdminStats(){
+  const body = document.getElementById('adm-stats-body');
+  if(!body) return;
+  body.innerHTML='<div style="padding:30px;text-align:center;color:var(--t3)">Cargando...</div>';
+  try{
+    const r = await fetch(authUrl('/api/admin/stats'),{headers:authHeaders()});
+    if(!r.ok){ body.innerHTML='<div style="padding:20px;color:var(--red)">No autorizado</div>'; return; }
+    const d = await r.json();
+    const u = d.users||{}, p = d.projects||{}, s = d.services||{};
+    const dot = on => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${on?'var(--ac)':'#444'};margin-right:6px;vertical-align:middle"></span>`;
+    const row = (l,v,c)=>`<div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:var(--t3)">${l}</span><span style="color:${c||'var(--t1)'};font-weight:700">${v}</span></div>`;
+    body.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div style="border:1px solid var(--b2);border-radius:8px;overflow:hidden">
+          <div style="padding:10px 12px;background:rgba(0,245,160,.04);border-bottom:1px solid var(--b2);font-size:11px;color:var(--ac);letter-spacing:.05em">👥 USUARIOS</div>
+          ${row('Total registrados', u.total||0, 'var(--ac)')}
+          ${row('Con email', u.with_email||0)}
+          ${row('Activos (últimos 30d)', u.active_30d||0, '#9bb8ff')}
+          ${row('Con token GitHub', u.with_gh_token||0)}
+          ${row('Baneados temporalmente', u.banned_temp||0, u.banned_temp?'var(--amber)':'')}
+          ${row('Baneados permanentes', u.banned_perm||0, u.banned_perm?'var(--red)':'')}
+        </div>
+        <div style="border:1px solid var(--b2);border-radius:8px;overflow:hidden">
+          <div style="padding:10px 12px;background:rgba(68,136,255,.04);border-bottom:1px solid var(--b2);font-size:11px;color:#9bb8ff;letter-spacing:.05em">📦 PROYECTOS</div>
+          ${row('Total alojados', p.total||0, '#9bb8ff')}
+          ${row('Corriendo ahora', p.running||0, p.running?'var(--ac)':'')}
+          ${row('Detenidos', p.stopped||0, 'var(--t3)')}
+        </div>
+        <div style="border:1px solid var(--b2);border-radius:8px;overflow:hidden;grid-column:1/-1">
+          <div style="padding:10px 12px;background:rgba(168,85,247,.04);border-bottom:1px solid var(--b2);font-size:11px;color:#c4b5fd;letter-spacing:.05em">⚙ SERVICIOS</div>
+          ${row(dot(s.sendgrid)+'SendGrid (emails)', s.sendgrid?'activo':'no configurado', s.sendgrid?'var(--ac)':'var(--t3)')}
+          ${row(dot(s.google_oauth)+'Google OAuth', s.google_oauth?'activo':'no configurado', s.google_oauth?'var(--ac)':'var(--t3)')}
+          ${row(dot(s.turnstile)+'Cloudflare Turnstile', s.turnstile?'activo':'modo degradado', s.turnstile?'var(--ac)':'var(--amber)')}
+          ${row(dot(s.engine==='uv')+'Motor de paquetes', s.engine||'pip')}
+          ${row(dot(s.mise)+'Mise (runtimes)', s.mise?'activo':'no disponible', s.mise?'var(--ac)':'var(--t3)')}
+        </div>
+      </div>`;
+  }catch(e){ body.innerHTML='<div style="padding:20px;color:var(--red)">Error: '+e.message+'</div>'; }
 }
 
 async function loadAdminUsers(){
