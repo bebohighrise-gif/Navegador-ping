@@ -1673,6 +1673,8 @@ a:hover{opacity:.75}
       </div>
       <div class="tb-clock"><div class="tb-clock-dot"></div><span id="tb-clock">00:00:00</span></div>
       <div class="tb-stat"><div class="pulse p-g"></div><span id="tb-run">0 running</span></div>
+      <button id="tb-admin" onclick="openAdminPanel()" title="Panel de Administración" style="display:none;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.35);color:#c4b5fd;font-family:var(--mono,monospace);font-size:10px;font-weight:700;letter-spacing:.08em;padding:6px 10px;border-radius:6px;cursor:pointer;flex-shrink:0">ADMIN</button>
+      <div id="tb-uname" style="display:none;font-size:11px;color:var(--t2);font-family:var(--mono,monospace);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title=""></div>
       <div class="tb-av" id="tb-av" title="Usuario">?</div>
       <button class="btn btn-g sm" onclick="logout()" title="Cerrar sesión" style="padding:5px 10px;flex-shrink:0;line-height:1">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M5 2H3a1 1 0 00-1 1v7a1 1 0 001 1h2M9 9l3-3-3-3M12 6.5H5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2202,6 +2204,8 @@ function authHeaders(extra){
 
 document.addEventListener('DOMContentLoaded', init);
 
+let CURRENT_USER=null, IS_ADMIN=false, NEEDS_GH_TOKEN=false;
+
 async function init(){
   if(!NX_TOKEN){window.location.href='/login';return;}
   try{
@@ -2209,11 +2213,42 @@ async function init(){
     if(resp.status===401){window.location.href='/login';return;}
     if(resp.ok){
       const cfg=await resp.json();
+      CURRENT_USER = cfg.user || null;
+      IS_ADMIN     = !!cfg.is_admin;
+      NEEDS_GH_TOKEN = !cfg.has_gh_token;
       if(cfg.has_gh_token || cfg.gh_token_from_env) GH_TOKEN='__server__';
+      // Mostrar badge de usuario / admin
+      try{
+        const un=document.getElementById('tb-uname');
+        if(un && CURRENT_USER){
+          un.textContent = '@'+(CURRENT_USER.username||'?');
+          un.title = (CURRENT_USER.email||CURRENT_USER.name||'') + (IS_ADMIN?' · admin':'');
+          un.style.display='block';
+          if(IS_ADMIN){ un.style.color='#c4b5fd'; }
+        }
+        const ab=document.getElementById('tb-admin');
+        if(ab && IS_ADMIN) ab.style.display='inline-block';
+        const av=document.getElementById('tb-av');
+        if(av){
+          if(CURRENT_USER && CURRENT_USER.picture){
+            av.innerHTML=`<img src="${CURRENT_USER.picture}" alt="">`;
+          } else if(CURRENT_USER){
+            av.textContent=(CURRENT_USER.username||'?')[0].toUpperCase();
+          }
+        }
+      }catch(_){}
     }
   }catch(e){}
   // Siempre mostrar la app (GH token es opcional)
   showApp();
+  // Aviso amistoso si falta token de GitHub para este usuario
+  if(NEEDS_GH_TOKEN){
+    setTimeout(()=>{
+      try{
+        toast('Conecta tu cuenta de GitHub para desplegar repos →','i',6000);
+      }catch(_){}
+    }, 1400);
+  }
 }
 
 async function showApp(){
@@ -4006,6 +4041,135 @@ document.addEventListener('mousemove',e=>{
     _aurRaf=null;
   });
 },{passive:true});
+
+/* ═════════════════════════════════════════════════════════════════
+   PANEL DE ADMINISTRACIÓN
+   ═════════════════════════════════════════════════════════════════ */
+async function openAdminPanel(){
+  if(!IS_ADMIN){ toast('Sólo administradores','r'); return; }
+  let m=document.getElementById('admin-modal');
+  if(!m){
+    m=document.createElement('div');
+    m.className='overlay'; m.id='admin-modal';
+    m.innerHTML=`
+      <div class="modal" style="max-width:920px">
+        <div class="modal-hdr">
+          <div class="modal-title">🛡 Panel de Administración</div>
+          <span class="modal-x" onclick="closeModal('admin-modal')">✕</span>
+        </div>
+        <div class="modal-body">
+          <div id="admin-stats" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <div class="chip" style="background:rgba(0,245,160,.08);border:1px solid rgba(0,245,160,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:var(--ac)" id="ad-st-users">— usuarios</div>
+            <div class="chip" style="background:rgba(68,136,255,.08);border:1px solid rgba(68,136,255,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:#9bb8ff" id="ad-st-projs">— proyectos</div>
+            <div class="chip" style="background:rgba(255,190,46,.08);border:1px solid rgba(255,190,46,.2);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono,monospace);color:var(--amber)" id="ad-st-run">— corriendo</div>
+          </div>
+          <div id="admin-userlist" style="border:1px solid rgba(255,255,255,.06);border-radius:8px;max-height:480px;overflow:auto">
+            <div style="padding:30px;text-align:center;color:var(--t3);font-family:var(--mono,monospace);font-size:11px">Cargando usuarios...</div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-g" onclick="loadAdminUsers()">↻ Recargar</button>
+          <button class="btn btn-g" onclick="closeModal('admin-modal')">Cerrar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+  }
+  openModal('admin-modal');
+  loadAdminUsers();
+}
+
+async function loadAdminUsers(){
+  const list=document.getElementById('admin-userlist');
+  if(!list) return;
+  list.innerHTML='<div style="padding:30px;text-align:center;color:var(--t3);font-family:var(--mono,monospace);font-size:11px">Cargando usuarios...</div>';
+  try{
+    const r=await fetch(authUrl('/api/admin/users'),{headers:authHeaders()});
+    if(!r.ok){ list.innerHTML='<div style="padding:30px;text-align:center;color:var(--red)">No autorizado</div>'; return; }
+    const d=await r.json();
+    const users=d.users||[];
+    const totalProj = users.reduce((a,u)=>a+(u.projects||0),0);
+    const totalRun  = users.reduce((a,u)=>a+(u.running||0),0);
+    document.getElementById('ad-st-users').textContent = users.length+' usuarios';
+    document.getElementById('ad-st-projs').textContent = totalProj+' proyectos';
+    document.getElementById('ad-st-run').textContent   = totalRun+' corriendo';
+    if(!users.length){ list.innerHTML='<div style="padding:30px;text-align:center;color:var(--t3)">Sin usuarios</div>'; return; }
+    let html='';
+    for(const u of users){
+      const isMe = CURRENT_USER && u.id===CURRENT_USER.id;
+      const isAdminUser = u.role==='admin';
+      let banLbl='';
+      if(u.ban==='perm') banLbl='<span style="color:var(--red);font-weight:700">⛔ PERMA-BAN</span>';
+      else if(u.ban && u.ban.indexOf('temp:')===0){
+        const sec=parseInt(u.ban.split(':')[1])||0;
+        const h=Math.ceil(sec/3600);
+        banLbl=`<span style="color:var(--amber)">⏱ ${h}h restantes</span>`;
+      }
+      const avatar = u.picture
+        ? `<img src="${u.picture}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
+        : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(0,245,160,.1);display:flex;align-items:center;justify-content:center;color:var(--ac);font-weight:700;font-family:var(--mono,monospace)">${(u.username||'?')[0].toUpperCase()}</div>`;
+      const created = u.created_at ? new Date(u.created_at*1000).toLocaleDateString('es-ES') : '—';
+      const lastL   = u.last_login ? new Date(u.last_login*1000).toLocaleString('es-ES') : 'nunca';
+      html += `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.04)">
+          ${avatar}
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--t1)">
+              <span>@${u.username||'?'}</span>
+              ${isAdminUser?'<span style="background:rgba(168,85,247,.15);color:#c4b5fd;padding:2px 6px;border-radius:4px;font-size:9px;letter-spacing:.05em">ADMIN</span>':''}
+              ${u.google_sub?'<span title="Cuenta Google" style="color:#4285F4;font-size:10px">●G</span>':''}
+              ${isMe?'<span style="background:rgba(0,245,160,.1);color:var(--ac);padding:2px 6px;border-radius:4px;font-size:9px">TÚ</span>':''}
+              ${banLbl}
+            </div>
+            <div style="font-size:11px;color:var(--t2);font-family:var(--mono,monospace);margin-top:2px">${u.email||'—'}</div>
+            <div style="font-size:10px;color:var(--t3);font-family:var(--mono,monospace);margin-top:2px">${u.projects} proy. · ${u.running} run · creado ${created} · último login: ${lastL}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            ${isMe||isAdminUser?'':`
+              ${u.ban?`<button class="btn btn-g sm" onclick="adminBan('${u.id}','unban',0)" title="Quitar baneo">✓ Desbanear</button>`:`
+                <button class="btn btn-g sm" onclick="adminBan('${u.id}','temp',null)" title="Banear temporal" style="color:var(--amber);border-color:rgba(255,190,46,.3)">⏱ Temp</button>
+                <button class="btn btn-g sm" onclick="adminBan('${u.id}','perm',0)" title="Banear permanente" style="color:var(--red);border-color:rgba(255,62,90,.3)">⛔ Perma</button>
+              `}
+              <button class="btn btn-g sm" onclick="adminDelete('${u.id}','${(u.username||'').replace(/'/g,'')}')" title="Eliminar usuario y todos sus proyectos" style="color:var(--red);border-color:rgba(255,62,90,.3)">✕</button>
+            `}
+          </div>
+        </div>`;
+    }
+    list.innerHTML=html;
+  }catch(e){
+    list.innerHTML='<div style="padding:30px;text-align:center;color:var(--red)">Error: '+e.message+'</div>';
+  }
+}
+
+async function adminBan(uid, mode, hours){
+  if(mode==='temp' && hours===null){
+    const h=prompt('¿Cuántas horas de baneo temporal?', '24');
+    if(!h) return;
+    hours=parseInt(h)||24;
+  }
+  try{
+    const r=await fetch(authUrl('/api/admin/ban'),{
+      method:'POST', headers:authHeaders(),
+      body:JSON.stringify({user_id:uid, mode:mode, hours:hours})
+    });
+    const d=await r.json();
+    if(r.ok){ toast(mode==='unban'?'Usuario desbaneado ✓':'Usuario baneado ✓','g'); loadAdminUsers(); }
+    else toast('Error: '+(d.error||'falló'),'r');
+  }catch(e){ toast('Error: '+e.message,'r'); }
+}
+
+async function adminDelete(uid, uname){
+  if(!confirm(`¿Eliminar al usuario @${uname}?\n\nEsto borrará TODOS sus proyectos y datos. Esta acción es IRREVERSIBLE.`)) return;
+  if(!confirm('Última confirmación: ¿de verdad eliminar @'+uname+'?')) return;
+  try{
+    const r=await fetch(authUrl('/api/admin/delete-user'),{
+      method:'POST', headers:authHeaders(),
+      body:JSON.stringify({user_id:uid})
+    });
+    const d=await r.json();
+    if(r.ok){ toast(`Usuario eliminado (${d.deleted_projects||0} proyectos borrados) ✓`,'g'); loadAdminUsers(); }
+    else toast('Error: '+(d.error||'falló'),'r');
+  }catch(e){ toast('Error: '+e.message,'r'); }
+}
 </script>
 </body>
 </html>

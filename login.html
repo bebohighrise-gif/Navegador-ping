@@ -336,11 +336,33 @@ body::after{
 
     <div class="cb">
       <div class="slbl">
-        <span class="slbl-txt">Autenticación segura</span>
+        <span class="slbl-txt" id="mode-lbl">Acceso</span>
         <div class="sline"></div>
       </div>
 
-      <label class="flbl" for="pwd">Contraseña de acceso</label>
+      <!-- Tabs Login / Registro -->
+      <div class="tabs" role="tablist" style="display:flex;gap:6px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);border-radius:10px;padding:4px;margin-bottom:14px">
+        <button id="tab-login" class="tabbtn active" type="button" onclick="setMode('login')" style="flex:1;padding:9px 0;border:0;background:transparent;color:var(--txt);font-family:var(--font);font-weight:600;font-size:12px;letter-spacing:.04em;border-radius:7px;cursor:pointer;transition:all .2s">INICIAR SESIÓN</button>
+        <button id="tab-reg" class="tabbtn" type="button" onclick="setMode('register')" style="flex:1;padding:9px 0;border:0;background:transparent;color:var(--txt2);font-family:var(--font);font-weight:600;font-size:12px;letter-spacing:.04em;border-radius:7px;cursor:pointer;transition:all .2s">REGISTRARSE</button>
+      </div>
+
+      <!-- Identificador (login) / Username (register) -->
+      <label class="flbl" for="ident" id="lbl-ident">Usuario o email</label>
+      <div class="iw" style="margin-bottom:10px">
+        <input class="inp" id="ident" type="text" placeholder="usuario o email"
+          autocomplete="username" spellcheck="false" oninput="hideA()" onkeydown="onKey(event)">
+      </div>
+
+      <!-- Email (sólo en register) -->
+      <div id="row-email" style="display:none">
+        <label class="flbl" for="email">Email</label>
+        <div class="iw" style="margin-bottom:10px">
+          <input class="inp" id="email" type="email" placeholder="tu@email.com"
+            autocomplete="email" spellcheck="false" oninput="hideA()" onkeydown="onKey(event)">
+        </div>
+      </div>
+
+      <label class="flbl" for="pwd" id="lbl-pwd">Contraseña</label>
       <div class="iw">
         <input class="inp" id="pwd" type="password" placeholder="••••••••"
           onkeydown="onKey(event)" oninput="onInput()" onkeyup="checkCaps(event)"
@@ -359,12 +381,26 @@ body::after{
       <div class="alrt a-e" id="ae"><svg viewBox="0 0 24 24"><polygon points="10.29 3.86 1.82 18 22.18 18 13.71 3.86 10.29 3.86"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span id="msg-e"></span></div>
       <div class="alrt a-i" id="ai"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span id="msg-i"></span></div>
       <div class="alrt a-l" id="al"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span id="msg-l"></span></div>
+      <div class="alrt a-s" id="as" style="background:rgba(0,245,160,.06);border-color:rgba(0,245,160,.25);color:var(--neon)"><svg viewBox="0 0 24 24" style="stroke:var(--neon)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span id="msg-s"></span></div>
 
       <!--CF_WIDGET-->
-      <button class="btn" id="btn" onclick="login(event)">
+      <button class="btn" id="btn" onclick="submitForm(event)">
         <span class="spin" id="spin"></span>
         <span id="btxt">Entrar →</span>
       </button>
+
+      <!-- Google OAuth -->
+      <div id="google-wrap" style="display:none;margin-top:14px">
+        <div style="display:flex;align-items:center;gap:10px;margin:14px 0 12px;color:var(--txt3);font-size:10px;font-family:var(--mono);letter-spacing:.08em">
+          <div style="flex:1;height:1px;background:rgba(255,255,255,.06)"></div>
+          <span>O CONTINÚA CON</span>
+          <div style="flex:1;height:1px;background:rgba(255,255,255,.06)"></div>
+        </div>
+        <button class="btn-google" type="button" onclick="window.location.href='/api/google/start'" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;background:#fff;color:#1a1a2a;border:0;border-radius:10px;font-family:var(--font);font-weight:600;font-size:14px;cursor:pointer;transition:transform .15s ease,box-shadow .2s ease">
+          <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+          Continuar con Google
+        </button>
+      </div>
     </div>
 
     <div class="cf">
@@ -484,48 +520,139 @@ function initTilt(){
   stage.addEventListener('mouseleave',()=>{card.style.transform='none';card.style.transition='transform .65s cubic-bezier(.34,1.2,.64,1)'});
 }
 
-let attempts=0,lockedUntil=0,eyeVis=false;
+let attempts=0,lockedUntil=0,eyeVis=false,authMode='login';
 const MAX_ATT={{MAX_ATTEMPTS}};
+const GOOGLE_ENABLED='{{GOOGLE_ENABLED}}'==='1';
+
 function checkCaps(e){document.getElementById('caps').classList.toggle('on',!!(e.getModifierState&&e.getModifierState('CapsLock')))}
 function toggleEye(){eyeVis=!eyeVis;const inp=document.getElementById('pwd');inp.type=eyeVis?'text':'password';document.getElementById('eye-o').style.display=eyeVis?'none':'block';document.getElementById('eye-c').style.display=eyeVis?'block':'none';inp.focus()}
 function onInput(){const l=document.getElementById('pwd').value.length,b=document.getElementById('sb');b.style.width=Math.min(l*8,100)+'%';b.style.background=l<4?'var(--red)':l<8?'var(--amber)':'var(--neon)';b.style.boxShadow=l>0?(l<4?'0 0 8px rgba(255,51,87,.5)':l<8?'0 0 8px rgba(255,190,46,.5)':'0 0 10px rgba(0,245,160,.55)'):'none';document.getElementById('pwd').classList.remove('err');hideA()}
-function onKey(e){if(e.key==='Enter')login(e);checkCaps(e)}
-function hideA(){['ae','ai','al'].forEach(id=>document.getElementById(id).classList.remove('on'))}
-function showA(id,key,msg){hideA();document.getElementById(key).textContent=msg;document.getElementById(id).classList.add('on')}
+function onKey(e){if(e.key==='Enter')submitForm(e);checkCaps(e)}
+function hideA(){['ae','ai','al','as'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('on')})}
+function showA(id,key,msg){hideA();const k=document.getElementById(key);if(k)k.textContent=msg;const el=document.getElementById(id);if(el)el.classList.add('on')}
 function isLocked(){if(Date.now()<lockedUntil){showA('al','msg-l','Bloqueado. Espera '+Math.ceil((lockedUntil-Date.now())/1000)+'s');return true}return false}
 
-async function login(e){
+function setMode(m){
+  authMode=m;hideA();
+  const tL=document.getElementById('tab-login'),tR=document.getElementById('tab-reg');
+  const isReg=m==='register';
+  tL.classList.toggle('active',!isReg);
+  tR.classList.toggle('active', isReg);
+  tL.style.background = isReg ? 'transparent' : 'rgba(0,245,160,.1)';
+  tR.style.background = isReg ? 'rgba(0,245,160,.1)' : 'transparent';
+  tL.style.color = isReg ? 'var(--txt2)' : 'var(--neon)';
+  tR.style.color = isReg ? 'var(--neon)' : 'var(--txt2)';
+  document.getElementById('mode-lbl').textContent = isReg ? 'Crear cuenta nueva' : 'Acceso';
+  document.getElementById('lbl-ident').textContent = isReg ? 'Nombre de usuario' : 'Usuario o email';
+  document.getElementById('ident').placeholder = isReg ? 'tu_usuario' : 'usuario o email';
+  document.getElementById('row-email').style.display = isReg ? 'block' : 'none';
+  document.getElementById('lbl-pwd').textContent = isReg ? 'Contraseña (mín. 6 caracteres)' : 'Contraseña';
+  document.getElementById('pwd').setAttribute('autocomplete', isReg ? 'new-password' : 'current-password');
+  document.getElementById('btxt').textContent = isReg ? 'Crear cuenta →' : 'Entrar →';
+}
+
+async function submitForm(e){
   if(isLocked())return;
-  const pwd=document.getElementById('pwd').value,btn=document.getElementById('btn'),spin=document.getElementById('spin'),txt=document.getElementById('btxt');
+  const ident=document.getElementById('ident').value.trim();
+  const pwd  =document.getElementById('pwd').value;
+  const email=(document.getElementById('email')||{}).value || '';
+  const btn=document.getElementById('btn'),spin=document.getElementById('spin'),txt=document.getElementById('btxt');
+  if(!ident){showA('ai','msg-i', authMode==='register' ? 'Elige un nombre de usuario' : 'Ingresa tu usuario o email');document.getElementById('ident').focus();return}
   if(!pwd){showA('ai','msg-i','Ingresa tu contraseña');document.getElementById('pwd').focus();return}
+  if(authMode==='register'){
+    if(pwd.length<6){showA('ae','msg-e','La contraseña debe tener al menos 6 caracteres');document.getElementById('pwd').focus();return}
+    if(!email){showA('ai','msg-i','Ingresa tu email');document.getElementById('email').focus();return}
+  }
   if(e&&e.clientX){const rpl=document.createElement('span');rpl.className='rpl';const rect=btn.getBoundingClientRect(),sz=Math.max(rect.width,rect.height);rpl.style.cssText=`width:${sz}px;height:${sz}px;left:${e.clientX-rect.left-sz/2}px;top:${e.clientY-rect.top-sz/2}px`;btn.appendChild(rpl);setTimeout(()=>rpl.remove(),600)}
-  btn.disabled=true;spin.style.display='inline-block';txt.textContent='Verificando...';hideA();
+  btn.disabled=true;spin.style.display='inline-block';txt.textContent= authMode==='register' ? 'Creando...' : 'Verificando...';hideA();
   let cfToken='';
   const cfKey='{{CF_KEY}}';
   if(cfKey){const tsEl=document.querySelector('.cf-turnstile-response')||document.querySelector('[name=cf-turnstile-response]');cfToken=tsEl?tsEl.value:'';}
+  const url     = authMode==='register' ? '/api/register' : '/api/login';
+  const payload = authMode==='register'
+    ? {username:ident, email:email, password:pwd, cf_token:cfToken}
+    : {identifier:ident, password:pwd, cf_token:cfToken};
   try{
-    const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd,cf_token:cfToken})});
-    if(res.ok){
-      const data=await res.json();
-      if(data.token)localStorage.setItem('nx_token',data.token);
-      spin.style.display='none';txt.textContent='✓ Acceso concedido';btn.classList.add('ok');
+    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    let data={};
+    try{ data=await res.json(); }catch(_){}
+    if(res.ok && data.token){
+      localStorage.setItem('nx_token',data.token);
+      spin.style.display='none';
+      txt.textContent= authMode==='register' ? '✓ Cuenta creada' : '✓ Acceso concedido';
+      btn.classList.add('ok');
       document.getElementById('sb').style.cssText='width:100%;background:var(--neon);box-shadow:0 0 16px rgba(0,245,160,.75)';
-      attempts=0;setTimeout(()=>{window.location.href='/?t='+encodeURIComponent(data.token)},580);
+      attempts=0;
+      setTimeout(()=>{window.location.href='/?t='+encodeURIComponent(data.token)},580);
     } else {
-      attempts++;spin.style.display='none';btn.disabled=false;txt.textContent='Entrar →';
-      document.getElementById('pwd').classList.add('err');
-      if(attempts>=MAX_ATT){const w=Math.min(30+(attempts-MAX_ATT)*15,120);lockedUntil=Date.now()+w*1000;showA('al','msg-l','Demasiados intentos. Espera '+w+'s.');attempts=0}
-      else{showA('ae','msg-e','Contraseña incorrecta');if(attempts>=2){const rem=MAX_ATT-attempts,a=document.getElementById('att');a.textContent=rem+' intento'+(rem!==1?'s':'')+' restante'+(rem!==1?'s':'');a.classList.add('on')}}
-      const inp=document.getElementById('pwd');inp.classList.add('shake');inp.value='';setTimeout(()=>inp.classList.remove('shake'),420);inp.focus();
+      spin.style.display='none';btn.disabled=false;
+      txt.textContent= authMode==='register' ? 'Crear cuenta →' : 'Entrar →';
+      // Mensaje real del servidor
+      const serverMsg = data.error || data.message || (authMode==='register' ? 'No se pudo crear la cuenta' : 'Credenciales incorrectas');
+      // Detectar bloqueo / captcha / baneo
+      const lower = serverMsg.toLowerCase();
+      const isLock = res.status===429 || lower.indexOf('bloque')>=0 || lower.indexOf('intento')>=0 || lower.indexOf('captcha')>=0;
+      const isBan  = res.status===403 || lower.indexOf('baneado')>=0 || lower.indexOf('suspendid')>=0;
+      if(isLock){
+        const m = serverMsg.match(/(\d+)\s*s/);
+        const w = m ? parseInt(m[1]) : 60;
+        lockedUntil = Date.now() + w*1000;
+        showA('al','msg-l', serverMsg);
+      } else if(isBan){
+        showA('al','msg-l', serverMsg);
+      } else {
+        if(authMode==='login'){
+          attempts++;
+          document.getElementById('pwd').classList.add('err');
+          showA('ae','msg-e', serverMsg);
+          if(attempts>=2 && attempts<MAX_ATT){
+            const rem=MAX_ATT-attempts,a=document.getElementById('att');
+            a.textContent=rem+' intento'+(rem!==1?'s':'')+' restante'+(rem!==1?'s':'');a.classList.add('on')
+          }
+        } else {
+          showA('ae','msg-e', serverMsg);
+        }
+      }
+      const inp=document.getElementById('pwd');inp.classList.add('shake');
+      if(authMode==='login') inp.value='';
+      setTimeout(()=>inp.classList.remove('shake'),420);inp.focus();
     }
-  }catch(ex){spin.style.display='none';btn.disabled=false;txt.textContent='Entrar →';showA('ae','msg-e','Error de conexión')}
+  }catch(ex){
+    spin.style.display='none';btn.disabled=false;
+    txt.textContent= authMode==='register' ? 'Crear cuenta →' : 'Entrar →';
+    showA('ae','msg-e','Error de conexión');
+  }
 }
+
+// Compatibilidad con código previo
+function login(e){return submitForm(e);}
 
 buildIntro();
 setTimeout(runBoot,80);
 
 // Mostrar bloqueo de IP si el servidor lo indica
 (function(){const lm='{{LOCKED_MSG}}';if(lm)showA('al','msg-l',lm);})();
+
+// Mostrar botón de Google si está habilitado
+(function(){
+  if(GOOGLE_ENABLED){
+    const w=document.getElementById('google-wrap');
+    if(w) w.style.display='block';
+  }
+})();
+
+// Leer error de OAuth desde la URL (?oauth_error=...)
+(function(){
+  try{
+    const p=new URLSearchParams(location.search);
+    const err=p.get('oauth_error');
+    if(err){
+      setTimeout(()=>showA('ae','msg-e', err), 1700);
+      // Limpiar de la URL
+      history.replaceState({},'',location.pathname);
+    }
+  }catch(_){}
+})();
 </script>
 </body>
 </html>

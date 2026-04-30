@@ -116,41 +116,75 @@ def _audit(ip: str, success: bool, reason: str = "", ua: str = ""):
 
 
 _TOKEN_TTL = 7 * 24 * 3600  # 7 días
-_active_tokens: dict = {}    # token → expiry_timestamp
+_active_tokens: dict = {}    # token → {"user_id": str, "expiry": float}
 _tokens_lock = threading.Lock()
 
-def _generate_session_token() -> str:
-    """Genera un token de sesión único con TTL."""
-    raw = f"{AUTH_TOKEN}:{time.time()}:{os.urandom(16).hex()}"
+def _generate_session_token(user_id: str = "admin") -> str:
+    """Genera un token de sesión único con TTL, asociado a un user_id."""
+    raw = f"{AUTH_TOKEN}:{user_id}:{time.time()}:{os.urandom(16).hex()}"
     token = hashlib.sha256(raw.encode()).hexdigest()
     with _tokens_lock:
-        _active_tokens[token] = time.time() + _TOKEN_TTL
+        _active_tokens[token] = {"user_id": user_id, "expiry": time.time() + _TOKEN_TTL}
     return token
+
+def _token_expiry(rec) -> float:
+    if isinstance(rec, dict):
+        return rec.get("expiry", 0)
+    if isinstance(rec, (int, float)):
+        return rec
+    return 0
 
 def _validate_session_token(token: str) -> bool:
     """Valida un token de sesión. Renueva automáticamente si está a más de 50% del TTL."""
     if not token:
         return False
-    # Compatibilidad: el AUTH_TOKEN legacy también es válido
+    # Compatibilidad: el AUTH_TOKEN legacy también es válido (admin implícito)
     if token == AUTH_TOKEN:
         return True
     with _tokens_lock:
-        expiry = _active_tokens.get(token)
-        if expiry is None:
+        rec = _active_tokens.get(token)
+        if rec is None:
             return False
+        expiry = _token_expiry(rec)
         if time.time() > expiry:
             del _active_tokens[token]
             return False
         # Auto-renovar si queda menos del 50% del TTL
         remaining = expiry - time.time()
         if remaining < _TOKEN_TTL * 0.5:
-            _active_tokens[token] = time.time() + _TOKEN_TTL
+            new_exp = time.time() + _TOKEN_TTL
+            if isinstance(rec, dict):
+                rec["expiry"] = new_exp
+            else:
+                _active_tokens[token] = new_exp
         return True
+
+def _session_user_id(token: str) -> str:
+    """Devuelve user_id para un token válido. Vacío si inválido. 'admin' para legacy."""
+    if not token:
+        return ""
+    if token == AUTH_TOKEN:
+        return "admin"
+    with _tokens_lock:
+        rec = _active_tokens.get(token)
+        if rec is None:
+            return ""
+        if isinstance(rec, dict):
+            return rec.get("user_id", "admin")
+        return "admin"
 
 def _revoke_session_token(token: str):
     """Invalida un token de sesión."""
     with _tokens_lock:
         _active_tokens.pop(token, None)
+
+def _revoke_all_user_tokens(user_id: str):
+    """Invalida todas las sesiones activas de un user_id."""
+    with _tokens_lock:
+        to_kill = [t for t, rec in _active_tokens.items()
+                   if isinstance(rec, dict) and rec.get("user_id") == user_id]
+        for t in to_kill:
+            del _active_tokens[t]
 
 def _cleanup_expired_tokens():
     """Limpia tokens expirados periódicamente."""
@@ -158,7 +192,7 @@ def _cleanup_expired_tokens():
         time.sleep(3600)
         now = time.time()
         with _tokens_lock:
-            expired = [t for t, exp in _active_tokens.items() if now > exp]
+            expired = [t for t, rec in _active_tokens.items() if now > _token_expiry(rec)]
             for t in expired:
                 del _active_tokens[t]
 
@@ -187,6 +221,356 @@ for _d in (BASE_DIR, DATA_DIR, LOGS_DIR, PROJECT_DATA_BASE, ENVS_BASE, BIN_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 UV_BIN = BIN_DIR / "uv"
+
+# ════════════════════════════════════════════════════════════════════════════
+# ── SISTEMA DE USUARIOS · OAuth Google · SendGrid · Admin ──────────────────
+# ════════════════════════════════════════════════════════════════════════════
+
+USERS_FILE      = DATA_DIR / "users.json"
+USER_DATA_BASE  = PERSIST / "usuarios"
+USER_DATA_BASE.mkdir(parents=True, exist_ok=True)
+
+_users_lock = threading.Lock()
+
+GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+GOOGLE_OAUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "").strip()
+SENDGRID_FROM    = os.environ.get("SENDGRID_FROM", "noreply@nexhost.app").strip()
+SENDGRID_ENABLED = bool(SENDGRID_API_KEY)
+
+# Estado OAuth temporal: state → {created, redirect_uri, mode}
+_oauth_states: dict = {}
+_oauth_lock = threading.Lock()
+
+def _hash_password(password: str, salt: str = "") -> str:
+    """PBKDF2-HMAC-SHA256 con salt — salt:hex(hash)."""
+    if not salt:
+        salt = os.urandom(16).hex()
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000)
+    return f"{salt}:{dk.hex()}"
+
+def _verify_password(password: str, stored: str) -> bool:
+    if not password or not stored or ":" not in stored:
+        return False
+    salt, _ = stored.split(":", 1)
+    return _hash_password(password, salt) == stored
+
+def load_users() -> list:
+    """Carga la lista de usuarios desde disco."""
+    if not USERS_FILE.exists():
+        return []
+    try:
+        return json.loads(USERS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+def save_users(users: list):
+    with _users_lock:
+        USERS_FILE.write_text(json.dumps(users, indent=2, ensure_ascii=False), encoding="utf-8")
+
+def _normalize_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+def _normalize_username(username: str) -> str:
+    return (username or "").strip().lower()
+
+def get_user(user_id: str):
+    if not user_id:
+        return None
+    for u in load_users():
+        if u.get("id") == user_id:
+            return u
+    return None
+
+def get_user_by_email(email: str):
+    em = _normalize_email(email)
+    if not em:
+        return None
+    for u in load_users():
+        if _normalize_email(u.get("email", "")) == em:
+            return u
+    return None
+
+def get_user_by_username(username: str):
+    un = _normalize_username(username)
+    if not un:
+        return None
+    for u in load_users():
+        if _normalize_username(u.get("username", "")) == un:
+            return u
+    return None
+
+def get_user_by_google_sub(sub: str):
+    if not sub:
+        return None
+    for u in load_users():
+        if u.get("google_sub") == sub:
+            return u
+    return None
+
+def update_user(user_id: str, **fields):
+    """Actualiza campos de un usuario y persiste."""
+    users = load_users()
+    changed = False
+    for u in users:
+        if u.get("id") == user_id:
+            for k, v in fields.items():
+                u[k] = v
+            changed = True
+            break
+    if changed:
+        save_users(users)
+    return changed
+
+def create_user(*, username: str = "", email: str = "", password: str = "",
+                google_sub: str = "", role: str = "user", picture: str = "",
+                name: str = "") -> tuple:
+    """Crea un usuario nuevo. Retorna (user, error)."""
+    username = (username or "").strip()
+    email    = _normalize_email(email)
+    if not username:
+        return None, "Falta el nombre de usuario"
+    if len(username) < 3 or len(username) > 32:
+        return None, "El usuario debe tener entre 3 y 32 caracteres"
+    if not re.match(r'^[a-zA-Z0-9_.-]+$', username):
+        return None, "Solo letras, números y . _ -"
+    if email and "@" not in email:
+        return None, "Email inválido"
+    if not password and not google_sub:
+        return None, "Falta contraseña"
+    if password and len(password) < 6:
+        return None, "Contraseña mínima de 6 caracteres"
+    users = load_users()
+    if any(_normalize_username(u.get("username", "")) == _normalize_username(username) for u in users):
+        return None, "Ese usuario ya existe"
+    if email and any(_normalize_email(u.get("email", "")) == email for u in users):
+        return None, "Ese email ya está registrado"
+    if google_sub and any(u.get("google_sub") == google_sub for u in users):
+        return None, "Esa cuenta Google ya está vinculada"
+
+    user_id = google_sub or ("u_" + hashlib.sha256(
+        f"{username}:{email}:{time.time()}:{os.urandom(8).hex()}".encode()
+    ).hexdigest()[:24])
+
+    user = {
+        "id":            user_id,
+        "username":      username,
+        "email":         email,
+        "name":          name or username,
+        "picture":       picture,
+        "password_hash": _hash_password(password) if password else "",
+        "google_sub":    google_sub,
+        "role":          role,
+        "gh_token":      "",
+        "banned_until":  0,        # 0 = no baneado, -1 = baneo permanente, >now = temporal
+        "created_at":    int(time.time()),
+        "last_login":    0,
+        "notify_errors": True,
+    }
+    users.append(user)
+    save_users(users)
+    # Crear carpeta de datos personal
+    try:
+        (USER_DATA_BASE / user_id).mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return user, ""
+
+def is_banned(user) -> tuple:
+    """Retorna (banned, msg). Verifica ban temporal o permanente."""
+    if not user:
+        return False, ""
+    bu = user.get("banned_until", 0)
+    if bu == -1:
+        return True, "Tu cuenta ha sido suspendida permanentemente."
+    if bu and bu > time.time():
+        rem = int(bu - time.time())
+        h = rem // 3600
+        m = (rem % 3600) // 60
+        if h:
+            t = f"{h}h {m}m"
+        else:
+            t = f"{m}m {rem % 60}s"
+        return True, f"Cuenta suspendida temporalmente. Restante: {t}"
+    return False, ""
+
+def is_admin_user(user) -> bool:
+    return bool(user and user.get("role") == "admin")
+
+def bootstrap_admin():
+    """Crea el usuario admin si no existe ningún admin todavía."""
+    users = load_users()
+    if any(u.get("role") == "admin" for u in users):
+        return
+    # Usar la contraseña original NEXHOST_PASSWORD
+    admin_pass = os.environ.get("NEXHOST_PASSWORD", "nexhost")
+    admin_email = os.environ.get("NEXHOST_ADMIN_EMAIL", "").strip()
+    user, err = create_user(
+        username="admin",
+        email=admin_email,
+        password=admin_pass,
+        role="admin",
+        name="Administrador",
+    )
+    if user:
+        print(f"[nexhost] ✓ Usuario admin creado (login: admin / contraseña actual)")
+    else:
+        print(f"[nexhost] ⚠ No se pudo crear admin: {err}")
+
+# Bootstrap inmediato (antes de aceptar requests)
+bootstrap_admin()
+
+# ── Carpeta de datos por usuario ───────────────────────────────────────────
+def user_data_dir(user_id: str) -> Path:
+    """Carpeta /usuarios/<id>/ en el almacenamiento persistente."""
+    p = USER_DATA_BASE / (user_id or "anon")
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+def project_belongs_to(project: dict, user) -> bool:
+    """True si el proyecto pertenece al usuario o si el usuario es admin."""
+    if not project:
+        return False
+    if is_admin_user(user):
+        return True
+    if not user:
+        return False
+    owner = project.get("owner_id", "")
+    # Proyectos sin owner = legacy (admin)
+    if not owner:
+        return user.get("role") == "admin"
+    return owner == user.get("id")
+
+# ── SendGrid (REST v3, urllib puro) ────────────────────────────────────────
+def send_email(to_email: str, subject: str, html: str, text: str = "") -> bool:
+    """Envía un email por SendGrid. Retorna True si se aceptó."""
+    if not SENDGRID_ENABLED:
+        return False
+    if not to_email or "@" not in to_email:
+        return False
+    payload = {
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": SENDGRID_FROM, "name": "NexHost"},
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": text or re.sub(r'<[^>]+>', '', html)},
+            {"type": "text/html",  "value": html},
+        ],
+    }
+    try:
+        req = urllib.request.Request(
+            "https://api.sendgrid.com/v3/mail/send",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                "Content-Type":  "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return 200 <= resp.status < 300
+    except Exception as e:
+        print(f"[nexhost] ⚠ SendGrid error: {e}")
+        return False
+
+def notify_project_error(project: dict, error_msg: str = "", returncode: int = -1):
+    """Avisa al dueño del proyecto que falló."""
+    if not SENDGRID_ENABLED:
+        return
+    owner_id = project.get("owner_id", "")
+    if not owner_id:
+        return
+    owner = get_user(owner_id)
+    if not owner or not owner.get("email") or not owner.get("notify_errors", True):
+        return
+    pid  = project.get("id", "")
+    name = project.get("name", pid)
+    repo = project.get("repo_url", "")
+    safe_msg = (error_msg or "")[:1500].replace("<", "&lt;").replace(">", "&gt;")
+    html = f"""<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;background:#0a0a14;color:#e8e8f0;padding:24px;margin:0">
+<div style="max-width:560px;margin:0 auto;background:#10101c;border:1px solid #2a2a44;border-radius:14px;overflow:hidden">
+  <div style="padding:18px 22px;background:#1a0a14;border-bottom:1px solid #4a1a2a">
+    <h2 style="margin:0;color:#ff6680;font-size:18px">⚠ NexHost — Proyecto caído</h2>
+  </div>
+  <div style="padding:22px">
+    <p style="color:#c0c0d8;margin:0 0 14px">Hola <strong>{owner.get('username','')}</strong>,</p>
+    <p style="color:#c0c0d8;margin:0 0 14px">Tu proyecto <strong style="color:#00f5a0">{name}</strong> ha terminado con error.</p>
+    <table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:13px">
+      <tr><td style="padding:6px 0;color:#80809a;width:120px">ID</td><td style="color:#e8e8f0;font-family:monospace">{pid}</td></tr>
+      <tr><td style="padding:6px 0;color:#80809a">Código salida</td><td style="color:#ff8090;font-family:monospace">{returncode}</td></tr>
+      {'<tr><td style="padding:6px 0;color:#80809a">Repo</td><td style="color:#80aaff;font-family:monospace;font-size:11px">' + repo + '</td></tr>' if repo else ''}
+    </table>
+    {'<pre style="background:#050510;padding:14px;border-radius:8px;color:#c0c0d8;font-size:11px;overflow:auto;max-height:240px;border:1px solid #2a2a44">' + safe_msg + '</pre>' if safe_msg else ''}
+    <p style="color:#80809a;font-size:12px;margin:20px 0 0;line-height:1.6">Entra al panel para revisar logs y reiniciar el proyecto.</p>
+  </div>
+  <div style="padding:14px 22px;background:#0a0a14;border-top:1px solid #2a2a44;color:#50506a;font-size:11px;font-family:monospace">
+    NexHost · notificación automática
+  </div>
+</div>
+</body></html>"""
+    threading.Thread(
+        target=send_email,
+        args=(owner["email"], f"[NexHost] {name} cayó (código {returncode})", html),
+        daemon=True,
+    ).start()
+
+# ── Google OAuth helpers ───────────────────────────────────────────────────
+GOOGLE_AUTH_URL  = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO  = "https://openidconnect.googleapis.com/v1/userinfo"
+
+def _oauth_redirect_uri(handler) -> str:
+    """Calcula la URL absoluta del callback OAuth (debe estar registrada en Google Cloud)."""
+    base = _canonical_base(handler)  # definido más adelante
+    return f"{base.rstrip('/')}/api/google/callback"
+
+def _new_oauth_state(redirect_to: str = "/") -> str:
+    state = os.urandom(16).hex()
+    with _oauth_lock:
+        # Limpiar estados viejos (>10 min)
+        now = time.time()
+        for k in list(_oauth_states.keys()):
+            if now - _oauth_states[k]["created"] > 600:
+                del _oauth_states[k]
+        _oauth_states[state] = {"created": now, "redirect_to": redirect_to}
+    return state
+
+def _consume_oauth_state(state: str) -> bool:
+    with _oauth_lock:
+        rec = _oauth_states.pop(state, None)
+    if not rec:
+        return False
+    return time.time() - rec["created"] < 600
+
+def google_exchange_code(code: str, redirect_uri: str) -> dict:
+    """Intercambia code por access_token + id_token."""
+    data = _urllib_parse.urlencode({
+        "code":          code,
+        "client_id":     GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri":  redirect_uri,
+        "grant_type":    "authorization_code",
+    }).encode()
+    req = urllib.request.Request(
+        GOOGLE_TOKEN_URL,
+        data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read())
+
+def google_userinfo(access_token: str) -> dict:
+    req = urllib.request.Request(
+        GOOGLE_USERINFO,
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
+
+# ════════════════════════════════════════════════════════════════════════════
 
 registry: dict = {}
 registry_lock   = threading.Lock()
@@ -373,6 +757,30 @@ def stream_output(pid, proc):
             registry[pid]["status"] = "stopped"
     _set_project_status(pid, "stopped")
     append_log(pid, f"[nexhost] Proceso terminado (código {proc.returncode})", "process")
+
+    # ── Notificar al dueño por email si el proceso falló ──
+    if proc.returncode not in (0, -signal.SIGTERM, -signal.SIGKILL, None):
+        try:
+            projs = load_projects()
+            proj  = next((p for p in projs if p["id"] == pid), None)
+            if proj:
+                # Tomar últimas líneas del log de proceso como contexto
+                last_lines = ""
+                try:
+                    lf = _log_file(pid, "process")
+                    if lf.exists():
+                        with lf.open("r", encoding="utf-8", errors="replace") as fh:
+                            tail = fh.readlines()[-25:]
+                            last_lines = "".join(tail)
+                except Exception:
+                    pass
+                threading.Thread(
+                    target=notify_project_error,
+                    args=(proj, last_lines, proc.returncode),
+                    daemon=True,
+                ).start()
+        except Exception as e:
+            print(f"[notify] error: {e}")
 
 # ── HuggingFace Dataset — urllib puro, sin dependencias externas ──────────
 _hf_watchers: dict = {}          # pid -> {"thread": t, "stop": Event}
@@ -724,6 +1132,30 @@ def stop_hf_watcher(pid: str):
         entry = _hf_watchers.pop(pid, None)
     if entry:
         entry["stop"].set()
+
+
+def _purge_hf_project_folder(project: dict):
+    """Borra la carpeta del proyecto en el HF Dataset (al eliminar el proyecto)."""
+    try:
+        dataset_id = _hf_dataset_id(project)
+        if not dataset_id:
+            return
+        from huggingface_hub import HfApi  # type: ignore
+        token = os.environ.get("BOT_DATA_TOKEN", "")
+        if not token:
+            return
+        api = HfApi(token=token)
+        try:
+            api.delete_folder(
+                path_in_repo=project["id"],
+                repo_id=dataset_id,
+                repo_type="dataset",
+                commit_message=f"Delete project {project['id']}",
+            )
+        except Exception as e:
+            print(f"[hf-purge] {project.get('id')}: {e}")
+    except Exception as e:
+        print(f"[hf-purge] error: {e}")
 
 
 def _ensure_uv():
@@ -2284,9 +2716,15 @@ def _strip_commit_hash(host: str) -> str:
     return re.sub(r'-[0-9a-f]{6,12}(\.hf\.space)', r'\1', host, flags=re.IGNORECASE)
 
 def _canonical_base(handler) -> str:
-    """URL base canónica del Space, siempre sin hash de commit."""
+    """URL base canónica del entorno, siempre sin hash de commit."""
     proto = "https"
-    # SPACE_ID nunca contiene hash de commit — prioridad absoluta
+    # 1. Override explícito por env
+    explicit = os.environ.get("NEXHOST_DOMAIN", "").strip()
+    if explicit:
+        if not explicit.startswith("http"):
+            explicit = f"{proto}://{explicit}"
+        return explicit.rstrip("/")
+    # 2. SPACE_ID (Hugging Face) — nunca contiene hash de commit
     space_id = os.environ.get("SPACE_ID", "").strip()
     if space_id and "/" in space_id:
         derived = space_id.replace("/", "-").replace("&", "-").replace("_", "-").lower() + ".hf.space"
@@ -2294,35 +2732,76 @@ def _canonical_base(handler) -> str:
     space_host = os.environ.get("SPACE_HOST", "").strip()
     if space_host:
         return f"{proto}://{_strip_commit_hash(space_host)}"
+    # 3. Replit
+    repl_dev = os.environ.get("REPLIT_DEV_DOMAIN", "").strip()
+    if repl_dev:
+        return f"{proto}://{repl_dev}"
+    repl_url = os.environ.get("REPLIT_URL", "").strip()
+    if repl_url:
+        if not repl_url.startswith("http"):
+            repl_url = f"{proto}://{repl_url}"
+        return repl_url.rstrip("/")
+    # 4. Headers de proxy
     hdr_space = handler.headers.get("X-Space-Host", "")
     if hdr_space:
         return f"{proto}://{_strip_commit_hash(hdr_space)}"
     fwd_host = handler.headers.get("X-Forwarded-Host", "")
     if fwd_host:
         return f"{proto}://{_strip_commit_hash(fwd_host)}"
+    fwd_proto = handler.headers.get("X-Forwarded-Proto", "").strip().lower()
+    if fwd_proto in ("http", "https"):
+        proto = fwd_proto
+    # 5. Último recurso: Host header
     host = handler.headers.get("Host", "")
+    if host and ("localhost" in host or host.startswith("127.") or host.startswith("0.0.0.0")):
+        proto = "http"
     return f"{proto}://{_strip_commit_hash(host)}"
 
 
-def _is_authed(handler):
+def _extract_session_token(handler) -> str:
+    """Extrae el token de sesión de query, cookie o header. Vacío si no válido."""
     qs = parse_qs(urlparse(handler.path).query)
-    # Query param token
     qt = qs.get("t", [""])[0]
     if qt and _validate_session_token(qt):
-        return True
-    # Cookie token
+        return qt
     raw = handler.headers.get("Cookie", "")
     for part in raw.split(";"):
         k, _, v = part.strip().partition("=")
         if k.strip() == "nx_token" and _validate_session_token(v.strip()):
-            return True
-    # Authorization header
+            return v.strip()
     auth_hdr = handler.headers.get("Authorization", "")
     if auth_hdr.startswith("Bearer "):
         bearer = auth_hdr[7:].strip()
         if _validate_session_token(bearer):
-            return True
-    return False
+            return bearer
+    return ""
+
+def _is_authed(handler):
+    return bool(_extract_session_token(handler))
+
+def _current_user(handler):
+    """Devuelve el dict del usuario logueado, o None. Para tokens legacy devuelve admin."""
+    tok = _extract_session_token(handler)
+    if not tok:
+        return None
+    uid = _session_user_id(tok)
+    if not uid:
+        return None
+    user = get_user(uid)
+    if user:
+        return user
+    # Fallback legacy: tokens admin sin usuario en disco → reconstruir desde admin
+    if uid == "admin":
+        admin = get_user_by_username("admin")
+        return admin
+    return None
+
+def _require_admin(handler) -> tuple:
+    """Retorna (user, ok). user puede ser None."""
+    u = _current_user(handler)
+    if not u or not is_admin_user(u):
+        return u, False
+    return u, True
 
 def _send_login_page(handler):
     """Login page embebida con Cloudflare Turnstile, rate-limit info y diseño mejorado."""
@@ -2353,7 +2832,9 @@ def _send_login_page(handler):
             .replace("{{RUNNING}}", str(running))
             .replace("{{TOTAL}}", str(total))
             .replace("{{MAX_ATTEMPTS}}", str(_MAX_ATTEMPTS))
-            .replace("{{CF_KEY}}", cf_key))
+            .replace("{{CF_KEY}}", cf_key)
+            .replace("{{GOOGLE_ENABLED}}", "1" if GOOGLE_OAUTH_ENABLED else "")
+            .replace("{{GOOGLE_CLIENT_ID}}", GOOGLE_CLIENT_ID))
     data = html.encode("utf-8")
     handler.send_response(200)
     handler.send_header("Content-Type", "text/html; charset=utf-8")
@@ -2384,6 +2865,14 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers(); self.wfile.write(data)
         else:
             self.send_response(404); self.end_headers()
+
+    def _oauth_redirect_with_error(self, msg: str):
+        """Redirige a /login con un mensaje de error tras fallo de OAuth."""
+        from urllib.parse import quote
+        self.send_response(302)
+        self.send_header("Location", f"/login?oauth_error={quote(msg)}")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def do_OPTIONS(self): self.send_json({})
 
@@ -2584,7 +3073,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/login": return _send_login_page(self)
 
-        if not _is_authed(self):
+        # ── Endpoints públicos: OAuth Google (no requieren sesión) ─────────
+        if path in ("/api/google/start", "/api/google/callback"):
+            # Continuar — la lógica de OAuth se ejecuta más abajo
+            pass
+        elif not _is_authed(self):
             if path.startswith("/api/"):
                 return self.send_json({"error": "No autorizado"}, 401)
             self.send_response(302)
@@ -2593,9 +3086,14 @@ class Handler(BaseHTTPRequestHandler):
 
         # GitHub API proxy
         if path.startswith("/api/gh/"):
-            token = load_config().get("gh_token", "")
+            cur = _current_user(self)
+            # Token: primero el del usuario, luego el global (sólo admin)
+            token = (cur.get("gh_token", "") if cur else "") or ""
+            if not token and is_admin_user(cur):
+                token = load_config().get("gh_token", "")
             if not token:
-                return self.send_json({"error": "No hay token de GitHub configurado"}, 400)
+                return self.send_json({"error": "No hay token de GitHub configurado",
+                                       "needs_gh_token": True}, 400)
             gh_path = path[len("/api/gh"):]
             # Filtrar el parámetro 't' (auth de NexHost) antes de reenviar a GitHub
             raw_qs  = urlparse(self.path).query
@@ -2627,7 +3125,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/projects":
-            projs = load_projects()
+            cur = _current_user(self)
+            projs_all = load_projects()
+            # Filtrar por dueño (admin ve todo)
+            if is_admin_user(cur):
+                projs = projs_all
+            else:
+                uid = cur.get("id") if cur else ""
+                projs = [p for p in projs_all if p.get("owner_id") == uid]
             # Auto-detectar dominio base canónico (elimina sufijo de commit HF)
             _env_domain = os.environ.get("NEXHOST_DOMAIN", "") or _canonical_base(self)
             base_domain = _env_domain
@@ -2779,13 +3284,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"content": "", "binary": True})
 
         if path == "/api/config":
-            gh  = os.environ.get("GH_TOKEN", "")
+            cur     = _current_user(self)
+            is_adm  = is_admin_user(cur)
+            env_gh  = os.environ.get("GH_TOKEN", "")
+            user_gh = (cur or {}).get("gh_token", "")
+            # Token GH efectivo: el del usuario, o el del env si es admin
+            effective_gh = user_gh or (env_gh if is_adm else "")
             hf  = os.environ.get("BOT_DATA_TOKEN", "")
-            dom = os.environ.get("NEXHOST_DOMAIN", "")
+            dom = _canonical_base(self)
             return self.send_json({
-                "has_gh_token":     bool(gh),
-                "gh_token_preview": ("***" + gh[-4:]) if gh else "",
-                "gh_token_from_env": True,
+                "has_gh_token":     bool(effective_gh),
+                "gh_token_preview": ("***" + effective_gh[-4:]) if effective_gh else "",
+                "gh_token_from_env": is_adm and bool(env_gh) and not user_gh,
+                "gh_token_from_user": bool(user_gh),
                 "hf_token_from_env": bool(hf),
                 "storage_path": str(PERSIST),
                 "base_domain":  dom,
@@ -2794,7 +3305,161 @@ class Handler(BaseHTTPRequestHandler):
                 "mise_version": _get_mise_version(),
                 "envs_base":    str(ENVS_BASE),
                 "session_ttl":  _TOKEN_TTL,
+                "user": {
+                    "id":       cur.get("id", "") if cur else "",
+                    "username": cur.get("username", "") if cur else "",
+                    "email":    cur.get("email", "") if cur else "",
+                    "name":     cur.get("name", "") if cur else "",
+                    "picture":  cur.get("picture", "") if cur else "",
+                    "role":     cur.get("role", "user") if cur else "user",
+                    "notify_errors": cur.get("notify_errors", True) if cur else True,
+                } if cur else None,
+                "is_admin":      is_adm,
+                "google_oauth":  GOOGLE_OAUTH_ENABLED,
+                "sendgrid":      SENDGRID_ENABLED,
             })
+
+        # ── Datos del usuario actual ────────────────────────────────────────
+        if path == "/api/me":
+            cur = _current_user(self)
+            if not cur:
+                return self.send_json({"error": "No autorizado"}, 401)
+            safe = {k: v for k, v in cur.items() if k != "password_hash"}
+            safe["has_gh_token"] = bool(cur.get("gh_token"))
+            safe["gh_token_preview"] = ("***" + cur["gh_token"][-4:]) if cur.get("gh_token") else ""
+            return self.send_json(safe)
+
+        # ── Listado de usuarios (sólo admin) ────────────────────────────────
+        if path == "/api/admin/users":
+            cur, ok = _require_admin(self)
+            if not ok:
+                return self.send_json({"error": "Sólo admin"}, 403)
+            users = load_users()
+            projs = load_projects()
+            now = time.time()
+            out = []
+            for u in users:
+                pcount = sum(1 for p in projs if p.get("owner_id") == u.get("id"))
+                running = sum(1 for p in projs if p.get("owner_id") == u.get("id")
+                              and p.get("status") == "running")
+                bu = u.get("banned_until", 0)
+                if bu == -1:
+                    ban = "perm"
+                elif bu and bu > now:
+                    ban = f"temp:{int(bu - now)}"
+                else:
+                    ban = ""
+                out.append({
+                    "id":           u.get("id"),
+                    "username":     u.get("username"),
+                    "email":        u.get("email", ""),
+                    "name":         u.get("name", ""),
+                    "picture":      u.get("picture", ""),
+                    "role":         u.get("role", "user"),
+                    "google_sub":   bool(u.get("google_sub")),
+                    "has_gh_token": bool(u.get("gh_token")),
+                    "created_at":   u.get("created_at", 0),
+                    "last_login":   u.get("last_login", 0),
+                    "ban":          ban,
+                    "projects":     pcount,
+                    "running":      running,
+                })
+            return self.send_json({"users": out, "total": len(out)})
+
+        # ── Inicio del flujo OAuth Google ──────────────────────────────────
+        if path == "/api/google/start":
+            if not GOOGLE_OAUTH_ENABLED:
+                return self.send_json({"error": "Google OAuth no configurado"}, 400)
+            redirect_uri = _oauth_redirect_uri(self)
+            state = _new_oauth_state(qs.get("redirect", ["/"])[0])
+            params = _urllib_parse.urlencode({
+                "client_id":     GOOGLE_CLIENT_ID,
+                "response_type": "code",
+                "scope":         "openid email profile",
+                "redirect_uri":  redirect_uri,
+                "state":         state,
+                "access_type":   "online",
+                "prompt":        "select_account",
+            })
+            url = f"{GOOGLE_AUTH_URL}?{params}"
+            self.send_response(302)
+            self.send_header("Location", url)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+
+        # ── Callback OAuth Google ──────────────────────────────────────────
+        if path == "/api/google/callback":
+            if not GOOGLE_OAUTH_ENABLED:
+                return self.send_json({"error": "Google OAuth no configurado"}, 400)
+            code  = qs.get("code", [""])[0]
+            state = qs.get("state", [""])[0]
+            err   = qs.get("error", [""])[0]
+            if err:
+                return self._oauth_redirect_with_error(f"Google: {err}")
+            if not code or not state or not _consume_oauth_state(state):
+                return self._oauth_redirect_with_error("Sesión OAuth inválida")
+            try:
+                tokens = google_exchange_code(code, _oauth_redirect_uri(self))
+                access_token = tokens.get("access_token", "")
+                if not access_token:
+                    return self._oauth_redirect_with_error("Google no devolvió token")
+                info = google_userinfo(access_token)
+            except Exception as e:
+                return self._oauth_redirect_with_error(f"Error Google: {e}")
+            sub     = info.get("sub", "")
+            email   = info.get("email", "")
+            name    = info.get("name", "")
+            picture = info.get("picture", "")
+            if not sub:
+                return self._oauth_redirect_with_error("Google: respuesta sin sub")
+
+            # Buscar/crear usuario
+            user = get_user_by_google_sub(sub)
+            if not user and email:
+                # Vincular cuenta existente con mismo email
+                existing = get_user_by_email(email)
+                if existing:
+                    update_user(existing["id"], google_sub=sub,
+                                picture=picture or existing.get("picture", ""),
+                                name=name or existing.get("name", ""))
+                    user = get_user(existing["id"])
+            if not user:
+                # Crear usuario nuevo
+                base_username = (email.split("@")[0] if email else f"user_{sub[:8]}")
+                base_username = re.sub(r'[^a-zA-Z0-9_.-]', '', base_username) or f"user_{sub[:8]}"
+                username = base_username
+                k = 1
+                while get_user_by_username(username):
+                    k += 1
+                    username = f"{base_username}{k}"
+                user, err = create_user(
+                    username=username,
+                    email=email,
+                    google_sub=sub,
+                    name=name,
+                    picture=picture,
+                    role="user",
+                )
+                if not user:
+                    return self._oauth_redirect_with_error(f"No se pudo crear usuario: {err}")
+
+            # Verificar baneo
+            banned, ban_msg = is_banned(user)
+            if banned:
+                return self._oauth_redirect_with_error(ban_msg)
+
+            update_user(user["id"], last_login=int(time.time()))
+            session_token = _generate_session_token(user["id"])
+            _audit(self.client_address[0], True, f"google:{user['username']}",
+                   self.headers.get("User-Agent", ""))
+            self.send_response(302)
+            self.send_header("Location", f"/?t={session_token}")
+            self.send_header("Set-Cookie",
+                f"nx_token={session_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={_TOKEN_TTL}")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
 
         if path == "/api/detect":
             return self.send_json({"error": "Use POST"}, 405)
@@ -2856,41 +3521,136 @@ class Handler(BaseHTTPRequestHandler):
                     _audit(client_ip, False, f"turnstile:{ts_reason}", ua)
                     return self.send_json({
                         "ok": False,
+                        "captcha": True,
                         "error": "Verificación anti-bot fallida. Recarga la página e inténtalo de nuevo.",
                     }, 403)
 
-            # ── Password check ───────────────────────────────────────────────
-            if hashlib.sha256(pwd.encode()).hexdigest() == AUTH_TOKEN:
-                _clear_attempts(client_ip)
-                _audit(client_ip, True, "ok", ua)
-                session_token = _generate_session_token()
-                resp_data = json.dumps({
-                    "ok": True,
-                    "token": session_token,
-                    "expires_in": _TOKEN_TTL,
-                    "engine": "uv" if UV else "pip",
-                    "mise": bool(_MISE),
-                }).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(resp_data)))
-                self.send_header("Set-Cookie",
-                    f"nx_token={session_token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={_TOKEN_TTL}")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(resp_data)
-            else:
+            # ── Identificación: email, username o (legacy) sólo password ────
+            identifier = (body.get("identifier") or body.get("email")
+                          or body.get("username") or "").strip()
+
+            user = None
+            if identifier:
+                if "@" in identifier:
+                    user = get_user_by_email(identifier)
+                else:
+                    user = get_user_by_username(identifier)
+
+            # Compatibilidad: si no se mandó identifier y la contraseña coincide
+            # con el secret legacy, login como admin
+            legacy_match = (not identifier and pwd and
+                            hashlib.sha256(pwd.encode()).hexdigest() == AUTH_TOKEN)
+            if legacy_match:
+                user = get_user_by_username("admin") or user
+
+            valid = False
+            if user and user.get("password_hash"):
+                valid = _verify_password(pwd, user["password_hash"])
+            elif legacy_match and user:
+                valid = True
+
+            if not valid:
                 _record_attempt(client_ip)
-                _, remaining_unlock = _check_rate_limit(client_ip)
                 remaining_attempts = max(0, _MAX_ATTEMPTS - len(_ip_attempts.get(client_ip, [])))
-                _audit(client_ip, False, "wrong_password", ua)
+                _audit(client_ip, False, "wrong_credentials", ua)
                 time.sleep(0.6)
-                msg = "Contraseña incorrecta"
+                msg = "Credenciales incorrectas"
                 if remaining_attempts == 0:
                     msg = f"IP bloqueada por {_LOCKOUT_TIME//60} min."
                 elif remaining_attempts <= 2:
-                    msg = f"Contraseña incorrecta. {remaining_attempts} intento{'s' if remaining_attempts!=1 else ''} restante{'s' if remaining_attempts!=1 else ''}."
-                self.send_json({"ok": False, "error": msg, "attempts_left": remaining_attempts}, 401)
+                    msg = f"Credenciales incorrectas. {remaining_attempts} intento{'s' if remaining_attempts!=1 else ''} restante{'s' if remaining_attempts!=1 else ''}."
+                return self.send_json({"ok": False, "error": msg, "attempts_left": remaining_attempts}, 401)
+
+            # ── Verificar baneo ─────────────────────────────────────────────
+            banned, ban_msg = is_banned(user)
+            if banned:
+                _audit(client_ip, False, f"banned:{user.get('username','')}", ua)
+                return self.send_json({"ok": False, "banned": True, "error": ban_msg}, 403)
+
+            # ── OK: emitir sesión ───────────────────────────────────────────
+            _clear_attempts(client_ip)
+            _audit(client_ip, True, f"ok:{user.get('username','')}", ua)
+            update_user(user["id"], last_login=int(time.time()))
+            session_token = _generate_session_token(user["id"])
+            resp_data = json.dumps({
+                "ok": True,
+                "token": session_token,
+                "expires_in": _TOKEN_TTL,
+                "engine": "uv" if UV else "pip",
+                "mise": bool(_MISE),
+                "user": {
+                    "id":       user["id"],
+                    "username": user["username"],
+                    "email":    user.get("email", ""),
+                    "name":     user.get("name", ""),
+                    "picture":  user.get("picture", ""),
+                    "role":     user.get("role", "user"),
+                },
+            }).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp_data)))
+            self.send_header("Set-Cookie",
+                f"nx_token={session_token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={_TOKEN_TTL}")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(resp_data)
+            return
+
+        # ── REGISTRO de usuario nuevo (público) ─────────────────────────────
+        if path == "/api/register":
+            length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(length) if length else b""
+            try:
+                body = json.loads(body_raw) if body_raw else {}
+            except:
+                body = {}
+            client_ip = self.client_address[0]
+            ua = self.headers.get("User-Agent", "")
+
+            allowed, unlock_in = _check_rate_limit(client_ip)
+            if not allowed:
+                return self.send_json({"ok": False, "error": "Demasiados intentos, espera"}, 429)
+
+            cf_token = body.get("cf_token", "")
+            if CF_TURNSTILE_ENABLED:
+                ts_ok, ts_reason = _verify_turnstile(cf_token, client_ip)
+                if not ts_ok:
+                    return self.send_json({"ok": False, "captcha": True,
+                                           "error": "Verificación anti-bot fallida"}, 403)
+
+            user, err = create_user(
+                username=body.get("username", ""),
+                email=body.get("email", ""),
+                password=body.get("password", ""),
+                role="user",
+            )
+            if not user:
+                _audit(client_ip, False, f"register_fail:{err}", ua)
+                return self.send_json({"ok": False, "error": err}, 400)
+
+            _clear_attempts(client_ip)
+            _audit(client_ip, True, f"register:{user['username']}", ua)
+            session_token = _generate_session_token(user["id"])
+            resp_data = json.dumps({
+                "ok": True,
+                "token": session_token,
+                "expires_in": _TOKEN_TTL,
+                "user": {
+                    "id":       user["id"],
+                    "username": user["username"],
+                    "email":    user.get("email", ""),
+                    "name":     user.get("name", ""),
+                    "role":     user.get("role", "user"),
+                },
+            }).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp_data)))
+            self.send_header("Set-Cookie",
+                f"nx_token={session_token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={_TOKEN_TTL}")
+            self.end_headers()
+            self.wfile.write(resp_data)
             return
 
         # A partir de aquí todos los endpoints requieren auth
@@ -2904,17 +3664,30 @@ class Handler(BaseHTTPRequestHandler):
             body = {}
 
         if path == "/api/deploy":
+            cur = _current_user(self)
+            if not cur:
+                return self.send_json({"error": "No autorizado"}, 401)
             project = body
             pid = project.get("id") or "p_" + str(int(time.time()))
             project["id"] = pid
             projs = load_projects()
+            existing = next((p for p in projs if p["id"] == pid), None)
+            # Si es un edit/redeploy, verificar dueño
+            if existing and not project_belongs_to(existing, cur):
+                return self.send_json({"error": "No eres el dueño de este proyecto"}, 403)
+            # Asignar dueño (preservar el original si existe)
+            project["owner_id"] = (existing.get("owner_id") if existing else None) or cur["id"]
             projs = [p for p in projs if p["id"] != pid]
             project["status"] = "building"
+            # Si el usuario no es admin y no envió token, usar el suyo (no env)
+            if not project.get("gh_token"):
+                project["gh_token"] = cur.get("gh_token", "") or (
+                    load_config().get("gh_token", "") if is_admin_user(cur) else "")
             projs.append(project)
             save_projects(projs)
             # Auto-instalar webhook en GitHub para redeploy automático al hacer push
             _repo  = project.get("repo_url", "")
-            _tok   = project.get("gh_token", "") or load_config().get("gh_token", "")
+            _tok   = project.get("gh_token", "")
             if _repo and _tok and "github.com" in _repo:
                 _base  = _canonical_base(self)
                 def _do_wh(_r=_repo, _t=_tok, _b=_base, _pid=pid):
@@ -2929,14 +3702,18 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True, "id": pid})
 
         if path == "/api/upload-project":
+            cur = _current_user(self)
+            if not cur:
+                return self.send_json({"error": "No autorizado"}, 401)
             # ── Deploy de proyecto personalizado sin GitHub (ZIP en base64) ──
             project   = {k: v for k, v in body.items() if k != "files_b64"}
             files_b64 = body.get("files_b64", "")
             pid = project.get("id") or "p_" + str(int(time.time() * 1000))
-            project["id"]      = pid
-            project["source"]  = "upload"
+            project["id"]       = pid
+            project["owner_id"] = cur["id"]
+            project["source"]   = "upload"
             project["repo_url"] = project.get("repo_url", "")
-            project["status"]  = "building"
+            project["status"]   = "building"
             work_dir = BASE_DIR / pid
             work_dir.mkdir(parents=True, exist_ok=True)
             if files_b64:
@@ -2996,14 +3773,22 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True})
 
         if path == "/api/stop":
+            cur = _current_user(self)
             pid = body.get("id", "")
+            projs = load_projects()
+            proj  = next((p for p in projs if p["id"] == pid), None)
+            if proj and not project_belongs_to(proj, cur):
+                return self.send_json({"error": "Sin permiso"}, 403)
             stop_project(pid)
             return self.send_json({"ok": True})
 
         if path == "/api/restart":
+            cur = _current_user(self)
             pid = body.get("id", "")
             projs = load_projects()
             proj  = next((p for p in projs if p["id"] == pid), None)
+            if proj and not project_belongs_to(proj, cur):
+                return self.send_json({"error": "Sin permiso"}, 403)
             if proj:
                 t = threading.Thread(target=start_project, args=(proj,), daemon=True)
                 t.start()
@@ -3037,10 +3822,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True, "redeployed": len(matched)})
 
         if path == "/api/delete":
+            cur = _current_user(self)
             pid = body.get("id", "")
+            projs = load_projects()
+            proj  = next((p for p in projs if p["id"] == pid), None)
+            if proj and not project_belongs_to(proj, cur):
+                return self.send_json({"error": "Sin permiso"}, 403)
             stop_project(pid)
             stop_hf_watcher(pid)
-            projs = load_projects()
             projs = [p for p in projs if p["id"] != pid]
             save_projects(projs)
             shutil.rmtree(BASE_DIR / pid, ignore_errors=True)       # código fuente
@@ -3051,7 +3840,114 @@ class Handler(BaseHTTPRequestHandler):
                 if lf.exists(): lf.unlink()
             hf = DATA_DIR / f"{pid}.history.json"
             if hf.exists(): hf.unlink()
+            # Borrar también del HF Dataset si existe
+            if proj and proj.get("persist_data"):
+                threading.Thread(target=_purge_hf_project_folder,
+                                 args=(proj,), daemon=True).start()
             return self.send_json({"ok": True})
+
+        # ── Per-user GitHub token ───────────────────────────────────────────
+        if path == "/api/user/gh-token":
+            cur = _current_user(self)
+            if not cur:
+                return self.send_json({"error": "No autorizado"}, 401)
+            new_tok = (body.get("token") or "").strip()
+            update_user(cur["id"], gh_token=new_tok)
+            return self.send_json({"ok": True,
+                                   "preview": ("***" + new_tok[-4:]) if new_tok else ""})
+
+        # ── Toggle de notificaciones por email ──────────────────────────────
+        if path == "/api/user/notify":
+            cur = _current_user(self)
+            if not cur:
+                return self.send_json({"error": "No autorizado"}, 401)
+            update_user(cur["id"], notify_errors=bool(body.get("notify_errors", True)))
+            return self.send_json({"ok": True})
+
+        # ── Cambio de contraseña ────────────────────────────────────────────
+        if path == "/api/user/password":
+            cur = _current_user(self)
+            if not cur:
+                return self.send_json({"error": "No autorizado"}, 401)
+            old = body.get("old_password", "")
+            new = body.get("new_password", "")
+            if cur.get("password_hash") and not _verify_password(old, cur["password_hash"]):
+                return self.send_json({"error": "Contraseña actual incorrecta"}, 400)
+            if not new or len(new) < 6:
+                return self.send_json({"error": "Mínimo 6 caracteres"}, 400)
+            update_user(cur["id"], password_hash=_hash_password(new))
+            return self.send_json({"ok": True})
+
+        # ── ADMIN: Banear (temp/perm) ───────────────────────────────────────
+        if path == "/api/admin/ban":
+            cur, ok = _require_admin(self)
+            if not ok:
+                return self.send_json({"error": "Sólo admin"}, 403)
+            uid    = body.get("user_id", "")
+            mode   = body.get("mode", "temp")    # "temp" | "perm" | "unban"
+            hours  = int(body.get("hours", 24))
+            target = get_user(uid)
+            if not target:
+                return self.send_json({"error": "Usuario no encontrado"}, 404)
+            if target.get("role") == "admin":
+                return self.send_json({"error": "No se puede banear a un admin"}, 400)
+            if mode == "unban":
+                update_user(uid, banned_until=0)
+            elif mode == "perm":
+                update_user(uid, banned_until=-1)
+                _revoke_all_user_tokens(uid)
+            else:
+                until = int(time.time() + max(1, hours) * 3600)
+                update_user(uid, banned_until=until)
+                _revoke_all_user_tokens(uid)
+            return self.send_json({"ok": True})
+
+        # ── ADMIN: Eliminar usuario completamente (incluye sus proyectos) ──
+        if path == "/api/admin/delete-user":
+            cur, ok = _require_admin(self)
+            if not ok:
+                return self.send_json({"error": "Sólo admin"}, 403)
+            uid = body.get("user_id", "")
+            if uid == cur.get("id"):
+                return self.send_json({"error": "No puedes eliminarte a ti mismo"}, 400)
+            target = get_user(uid)
+            if not target:
+                return self.send_json({"error": "Usuario no encontrado"}, 404)
+            # 1. Borrar todos los proyectos del usuario
+            projs = load_projects()
+            user_projs = [p for p in projs if p.get("owner_id") == uid]
+            for p in user_projs:
+                pid = p["id"]
+                try:
+                    stop_project(pid)
+                    stop_hf_watcher(pid)
+                except Exception:
+                    pass
+                shutil.rmtree(BASE_DIR / pid, ignore_errors=True)
+                shutil.rmtree(_get_env_dir(pid), ignore_errors=True)
+                shutil.rmtree(PROJECT_DATA_BASE / pid, ignore_errors=True)
+                for lt in ("build", "process", ""):
+                    lf = _log_file(pid, lt)
+                    if lf.exists():
+                        try: lf.unlink()
+                        except: pass
+                hist = DATA_DIR / f"{pid}.history.json"
+                if hist.exists():
+                    try: hist.unlink()
+                    except: pass
+                if p.get("persist_data"):
+                    threading.Thread(target=_purge_hf_project_folder,
+                                     args=(p,), daemon=True).start()
+            projs = [p for p in projs if p.get("owner_id") != uid]
+            save_projects(projs)
+            # 2. Borrar carpeta de datos personales
+            shutil.rmtree(USER_DATA_BASE / uid, ignore_errors=True)
+            # 3. Revocar sesiones e eliminar del registro
+            _revoke_all_user_tokens(uid)
+            users = load_users()
+            users = [u for u in users if u.get("id") != uid]
+            save_users(users)
+            return self.send_json({"ok": True, "deleted_projects": len(user_projs)})
 
         if path == "/api/env":
             pid = body.get("id", "")
@@ -3063,8 +3959,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True})
 
         if path == "/api/config/gh-token":
-            # Los tokens se configuran como secrets del HF Space, no en archivo
-            return self.send_json({"ok": True, "note": "Usa el secret GH_TOKEN en tu HF Space"})
+            # Compat: ahora se guarda en el usuario actual (per-user)
+            cur = _current_user(self)
+            if not cur:
+                return self.send_json({"error": "No autorizado"}, 401)
+            new_tok = (body.get("token") or "").strip()
+            update_user(cur["id"], gh_token=new_tok)
+            return self.send_json({
+                "ok": True,
+                "preview": ("***" + new_tok[-4:]) if new_tok else "",
+                "scope": "user",
+            })
 
         if path == "/api/config-update":
             pid = body.get("id", "")
