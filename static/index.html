@@ -4337,6 +4337,13 @@ async function loadAdminUsers(){
         const h=Math.ceil(sec/3600);
         banLbl=`<span style="color:var(--amber)">⏱ ${h}h restantes</span>`;
       }
+      // Detalle del baneo (motivo + admin) si está baneado
+      let banDetail='';
+      if(u.ban && (u.ban_reason || u.ban_by)){
+        const safeReason = (u.ban_reason||'').replace(/[<>&]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+        const byTxt = u.ban_by ? `por @${u.ban_by}` : '';
+        banDetail = `<div style="margin-top:4px;padding:6px 10px;background:rgba(255,62,90,.06);border-left:2px solid rgba(255,62,90,.4);border-radius:3px;font-size:10px;color:var(--t2);line-height:1.5"><strong style="color:var(--red)">Motivo:</strong> ${safeReason||'(sin motivo)'} ${byTxt?`<span style="color:var(--t3)">· ${byTxt}</span>`:''}</div>`;
+      }
       const avatar = u.picture
         ? `<img src="${u.picture}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
         : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(0,245,160,.1);display:flex;align-items:center;justify-content:center;color:var(--ac);font-weight:700;font-family:var(--mono,monospace)">${(u.username||'?')[0].toUpperCase()}</div>`;
@@ -4355,12 +4362,13 @@ async function loadAdminUsers(){
             </div>
             <div style="font-size:11px;color:var(--t2);font-family:var(--mono,monospace);margin-top:2px">${u.email||'—'}</div>
             <div style="font-size:10px;color:var(--t3);font-family:var(--mono,monospace);margin-top:2px">${u.projects} proy. · ${u.running} run · creado ${created} · último login: ${lastL}</div>
+            ${banDetail}
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
             ${isMe||isAdminUser?'':`
-              ${u.ban?`<button class="btn btn-g sm" onclick="adminBan('${u.id}','unban',0)" title="Quitar baneo">✓ Desbanear</button>`:`
-                <button class="btn btn-g sm" onclick="adminBan('${u.id}','temp',null)" title="Banear temporal" style="color:var(--amber);border-color:rgba(255,190,46,.3)">⏱ Temp</button>
-                <button class="btn btn-g sm" onclick="adminBan('${u.id}','perm',0)" title="Banear permanente" style="color:var(--red);border-color:rgba(255,62,90,.3)">⛔ Perma</button>
+              ${u.ban?`<button class="btn btn-g sm" onclick="adminBan('${u.id}','unban','${(u.username||'').replace(/'/g,'')}')" title="Quitar baneo">✓ Desbanear</button>`:`
+                <button class="btn btn-g sm" onclick="openBanModal('${u.id}','${(u.username||'').replace(/'/g,'')}','temp')" title="Banear temporal" style="color:var(--amber);border-color:rgba(255,190,46,.3)">⏱ Temp</button>
+                <button class="btn btn-g sm" onclick="openBanModal('${u.id}','${(u.username||'').replace(/'/g,'')}','perm')" title="Banear permanente" style="color:var(--red);border-color:rgba(255,62,90,.3)">⛔ Perma</button>
               `}
               <button class="btn btn-g sm" onclick="adminDelete('${u.id}','${(u.username||'').replace(/'/g,'')}')" title="Eliminar usuario y todos sus proyectos" style="color:var(--red);border-color:rgba(255,62,90,.3)">✕</button>
             `}
@@ -4373,19 +4381,123 @@ async function loadAdminUsers(){
   }
 }
 
-async function adminBan(uid, mode, hours){
-  if(mode==='temp' && hours===null){
-    const h=prompt('¿Cuántas horas de baneo temporal?', '24');
-    if(!h) return;
-    hours=parseInt(h)||24;
+// Modal de baneo: pide motivo (obligatorio), horas (si temp) y confirma con email
+function openBanModal(uid, uname, mode){
+  let m=document.getElementById('ban-modal');
+  if(!m){
+    m=document.createElement('div');
+    m.className='overlay'; m.id='ban-modal';
+    m.innerHTML=`
+      <div class="modal" style="max-width:520px">
+        <div class="modal-hdr">
+          <div class="modal-title" id="ban-mdl-title">⛔ Banear usuario</div>
+          <span class="modal-x" onclick="closeModal('ban-modal')">✕</span>
+        </div>
+        <div class="modal-body">
+          <div id="ban-mdl-target" style="background:rgba(255,62,90,.06);border:1px solid rgba(255,62,90,.2);border-radius:6px;padding:10px 12px;margin-bottom:14px;font-family:var(--mono,monospace);font-size:12px;color:var(--t1)"></div>
+
+          <div id="ban-mdl-hours-row" style="margin-bottom:12px">
+            <div style="font-size:10px;color:var(--t3);margin-bottom:4px;font-family:var(--mono,monospace);letter-spacing:.05em">DURACIÓN (HORAS)</div>
+            <div style="display:flex;gap:6px;margin-bottom:6px">
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-hours').value=1">1h</button>
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-hours').value=24">24h</button>
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-hours').value=72">3d</button>
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-hours').value=168">7d</button>
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-hours').value=720">30d</button>
+            </div>
+            <input id="ban-mdl-hours" type="number" min="1" max="8760" class="inp" placeholder="24" value="24" style="margin-bottom:0">
+          </div>
+
+          <div style="margin-bottom:12px">
+            <div style="font-size:10px;color:var(--t3);margin-bottom:4px;font-family:var(--mono,monospace);letter-spacing:.05em">MOTIVO <span style="color:var(--red)">*</span></div>
+            <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-reason').value='Spam o contenido no deseado'">Spam</button>
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-reason').value='Abuso de recursos del servidor'">Abuso de recursos</button>
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-reason').value='Contenido ilegal o inapropiado'">Contenido inapropiado</button>
+              <button class="btn btn-g sm" onclick="document.getElementById('ban-mdl-reason').value='Violación de los Términos de Servicio'">Violación TOS</button>
+            </div>
+            <textarea id="ban-mdl-reason" class="inp" rows="3" maxlength="300" placeholder="Explica brevemente el motivo del baneo. El usuario lo verá en su pantalla de login y por email." style="margin-bottom:0;resize:vertical;min-height:70px;font-family:inherit"></textarea>
+          </div>
+
+          <label id="ban-mdl-email-row" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);cursor:pointer;padding:8px 10px;background:var(--s4);border-radius:6px;border:1px solid var(--b2)">
+            <input type="checkbox" id="ban-mdl-notify" checked style="margin:0">
+            <span>Enviar email al usuario notificando del baneo y motivo</span>
+          </label>
+          <div id="ban-mdl-email-warn" style="display:none;font-size:10px;color:var(--amber);margin-top:6px;font-family:var(--mono,monospace)">⚠ SendGrid no configurado — no se enviará email</div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-g" onclick="closeModal('ban-modal')">Cancelar</button>
+          <button class="btn btn-p" id="ban-mdl-confirm" onclick="confirmBan()" style="background:rgba(255,62,90,.15);border-color:rgba(255,62,90,.4);color:#ff8090">⛔ Aplicar baneo</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
   }
+  // Configurar modal según modo
+  document.getElementById('ban-mdl-title').textContent = mode==='perm' ? '⛔ Baneo permanente' : '⏱ Baneo temporal';
+  document.getElementById('ban-mdl-hours-row').style.display = mode==='perm' ? 'none' : 'block';
+  document.getElementById('ban-mdl-target').innerHTML = `Vas a banear a <strong style="color:var(--red)">@${uname}</strong>${mode==='perm'?' de forma <strong>PERMANENTE</strong>':' temporalmente'}.<br><span style="color:var(--t3);font-size:11px">Su sesión activa se cerrará inmediatamente y verá el motivo al intentar entrar.</span>`;
+  document.getElementById('ban-mdl-reason').value = '';
+  document.getElementById('ban-mdl-confirm').textContent = mode==='perm' ? '⛔ Banear permanentemente' : '⏱ Aplicar baneo temporal';
+  // Verificar disponibilidad de SendGrid
+  fetch(authUrl('/api/config'),{headers:authHeaders()}).then(r=>r.json()).then(cfg=>{
+    const cb = document.getElementById('ban-mdl-notify');
+    const warn = document.getElementById('ban-mdl-email-warn');
+    if(!cfg.sendgrid){ cb.checked=false; cb.disabled=true; warn.style.display='block'; }
+    else { cb.disabled=false; warn.style.display='none'; }
+  }).catch(()=>{});
+  // Guardar contexto
+  window._banCtx = {uid, uname, mode};
+  openModal('ban-modal');
+  setTimeout(()=>document.getElementById('ban-mdl-reason').focus(), 100);
+}
+
+async function confirmBan(){
+  const ctx = window._banCtx || {};
+  const reason = (document.getElementById('ban-mdl-reason').value || '').trim();
+  const notify = document.getElementById('ban-mdl-notify').checked;
+  let hours = 24;
+  if(ctx.mode==='temp'){
+    hours = parseInt(document.getElementById('ban-mdl-hours').value) || 24;
+    if(hours < 1 || hours > 8760){ toast('Horas inválidas (1-8760)','r'); return; }
+  }
+  if(!reason){ toast('El motivo es obligatorio','r'); document.getElementById('ban-mdl-reason').focus(); return; }
+  if(reason.length < 5){ toast('El motivo es demasiado corto','r'); return; }
+
+  const btn = document.getElementById('ban-mdl-confirm');
+  btn.disabled = true; const oldTxt = btn.textContent; btn.textContent = 'Aplicando...';
   try{
     const r=await fetch(authUrl('/api/admin/ban'),{
       method:'POST', headers:authHeaders(),
-      body:JSON.stringify({user_id:uid, mode:mode, hours:hours})
+      body:JSON.stringify({user_id:ctx.uid, mode:ctx.mode, hours:hours, reason:reason, notify_email:notify})
     });
     const d=await r.json();
-    if(r.ok){ toast(mode==='unban'?'Usuario desbaneado ✓':'Usuario baneado ✓','g'); loadAdminUsers(); }
+    if(r.ok){
+      let msg = ctx.mode==='perm' ? `@${ctx.uname} baneado permanentemente ✓` : `@${ctx.uname} baneado por ${hours}h ✓`;
+      if(d.email_sent) msg += ' · email enviado';
+      toast(msg,'g');
+      closeModal('ban-modal');
+      loadAdminUsers();
+    } else {
+      toast('Error: '+(d.error||'falló'),'r');
+      btn.disabled = false; btn.textContent = oldTxt;
+    }
+  }catch(e){
+    toast('Error: '+e.message,'r');
+    btn.disabled = false; btn.textContent = oldTxt;
+  }
+}
+
+// Desbaneo directo (sin modal)
+async function adminBan(uid, mode, uname){
+  if(mode!=='unban') return;  // sólo desbaneo desde aquí, ban va por openBanModal
+  if(!confirm(`¿Quitar el baneo a @${uname}?`)) return;
+  try{
+    const r=await fetch(authUrl('/api/admin/ban'),{
+      method:'POST', headers:authHeaders(),
+      body:JSON.stringify({user_id:uid, mode:'unban'})
+    });
+    const d=await r.json();
+    if(r.ok){ toast(`@${uname} desbaneado ✓`,'g'); loadAdminUsers(); }
     else toast('Error: '+(d.error||'falló'),'r');
   }catch(e){ toast('Error: '+e.message,'r'); }
 }

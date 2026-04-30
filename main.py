@@ -365,6 +365,9 @@ def create_user(*, username: str = "", email: str = "", password: str = "",
         "role":          role,
         "gh_token":      "",
         "banned_until":  0,        # 0 = no baneado, -1 = baneo permanente, >now = temporal
+        "ban_reason":    "",       # motivo del último baneo (opcional)
+        "ban_by":        "",       # username del admin que aplicó el baneo
+        "ban_at":        0,        # timestamp del baneo
         "created_at":    int(time.time()),
         "last_login":    0,
         "notify_errors": True,
@@ -379,12 +382,20 @@ def create_user(*, username: str = "", email: str = "", password: str = "",
     return user, ""
 
 def is_banned(user) -> tuple:
-    """Retorna (banned, msg). Verifica ban temporal o permanente."""
+    """Retorna (banned, msg). Verifica ban temporal o permanente.
+    El mensaje incluye el motivo si está registrado."""
     if not user:
         return False, ""
     bu = user.get("banned_until", 0)
+    reason = (user.get("ban_reason") or "").strip()
+    by     = (user.get("ban_by") or "").strip()
+    suffix = ""
+    if reason:
+        suffix += f" Motivo: {reason}."
+    if by:
+        suffix += f" Aplicado por: @{by}."
     if bu == -1:
-        return True, "Tu cuenta ha sido suspendida permanentemente."
+        return True, "Tu cuenta ha sido suspendida permanentemente." + suffix
     if bu and bu > time.time():
         rem = int(bu - time.time())
         h = rem // 3600
@@ -393,7 +404,7 @@ def is_banned(user) -> tuple:
             t = f"{h}h {m}m"
         else:
             t = f"{m}m {rem % 60}s"
-        return True, f"Cuenta suspendida temporalmente. Restante: {t}"
+        return True, f"Cuenta suspendida temporalmente. Restante: {t}." + suffix
     return False, ""
 
 def is_admin_user(user) -> bool:
@@ -3404,6 +3415,9 @@ class Handler(BaseHTTPRequestHandler):
                     "created_at":   u.get("created_at", 0),
                     "last_login":   u.get("last_login", 0),
                     "ban":          ban,
+                    "ban_reason":   u.get("ban_reason", ""),
+                    "ban_by":       u.get("ban_by", ""),
+                    "ban_at":       u.get("ban_at", 0),
                     "projects":     pcount,
                     "running":      running,
                 })
@@ -3929,21 +3943,72 @@ class Handler(BaseHTTPRequestHandler):
             uid    = body.get("user_id", "")
             mode   = body.get("mode", "temp")    # "temp" | "perm" | "unban"
             hours  = int(body.get("hours", 24))
+            reason = (body.get("reason") or "").strip()[:300]
+            notify = bool(body.get("notify_email", True))
             target = get_user(uid)
             if not target:
                 return self.send_json({"error": "Usuario no encontrado"}, 404)
             if target.get("role") == "admin":
                 return self.send_json({"error": "No se puede banear a un admin"}, 400)
+
+            now_ts = int(time.time())
+            admin_username = cur.get("username", "admin")
+
             if mode == "unban":
-                update_user(uid, banned_until=0)
+                update_user(uid, banned_until=0, ban_reason="", ban_by="", ban_at=0)
             elif mode == "perm":
-                update_user(uid, banned_until=-1)
+                update_user(uid, banned_until=-1, ban_reason=reason,
+                            ban_by=admin_username, ban_at=now_ts)
                 _revoke_all_user_tokens(uid)
             else:
                 until = int(time.time() + max(1, hours) * 3600)
-                update_user(uid, banned_until=until)
+                update_user(uid, banned_until=until, ban_reason=reason,
+                            ban_by=admin_username, ban_at=now_ts)
                 _revoke_all_user_tokens(uid)
-            return self.send_json({"ok": True})
+
+            # Notificación por email (si SendGrid disponible y modo != unban)
+            email_sent = False
+            if mode != "unban" and notify and SENDGRID_ENABLED:
+                em = (target.get("email") or "").strip()
+                if em and "@" in em:
+                    if mode == "perm":
+                        title = "Tu cuenta ha sido suspendida permanentemente"
+                        dur_html = '<strong style="color:#ff6680">permanente</strong>'
+                    else:
+                        title = f"Tu cuenta ha sido suspendida temporalmente ({hours}h)"
+                        dur_html = f'<strong style="color:#ffbe2e">{hours} horas</strong>'
+                    safe_reason = (reason or "(sin motivo especificado)").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+                    html = f"""<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;background:#0a0a14;color:#e8e8f0;padding:24px;margin:0">
+<div style="max-width:560px;margin:0 auto;background:#10101c;border:1px solid #2a2a44;border-radius:14px;overflow:hidden">
+  <div style="padding:18px 22px;background:#1a0a14;border-bottom:1px solid #4a1a2a">
+    <h2 style="margin:0;color:#ff6680;font-size:18px">⛔ NexHost — Cuenta suspendida</h2>
+  </div>
+  <div style="padding:22px">
+    <p style="color:#c0c0d8;margin:0 0 14px">Hola <strong>{target.get('username','')}</strong>,</p>
+    <p style="color:#c0c0d8;margin:0 0 14px">{title}.</p>
+    <table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:13px">
+      <tr><td style="padding:6px 0;color:#80809a;width:120px">Duración</td><td>{dur_html}</td></tr>
+      <tr><td style="padding:6px 0;color:#80809a">Aplicado por</td><td style="color:#e8e8f0;font-family:monospace">@{admin_username}</td></tr>
+    </table>
+    <div style="background:#050510;border-left:3px solid #ff6680;padding:12px 16px;margin:14px 0;border-radius:4px">
+      <div style="color:#80809a;font-size:11px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Motivo</div>
+      <div style="color:#e8e8f0;font-size:13px;line-height:1.6">{safe_reason}</div>
+    </div>
+    <p style="color:#80809a;font-size:12px;margin:20px 0 0;line-height:1.6">Si crees que es un error, responde a este email para apelar.</p>
+  </div>
+  <div style="padding:14px 22px;background:#0a0a14;border-top:1px solid #2a2a44;color:#50506a;font-size:11px;font-family:monospace">
+    NexHost · notificación de moderación
+  </div>
+</div>
+</body></html>"""
+                    threading.Thread(
+                        target=send_email,
+                        args=(em, f"[NexHost] {title}", html),
+                        daemon=True,
+                    ).start()
+                    email_sent = True
+
+            return self.send_json({"ok": True, "email_sent": email_sent})
 
         # ── ADMIN: Eliminar usuario completamente (incluye sus proyectos) ──
         if path == "/api/admin/delete-user":
