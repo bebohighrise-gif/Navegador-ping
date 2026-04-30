@@ -1,0 +1,9 @@
+[project]
+name = "nexhost"
+version = "0.1.0"
+description = "NexHost - Motor de hosting"
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub>=0.20.0",
+    "requests>=2.31.0",
+]

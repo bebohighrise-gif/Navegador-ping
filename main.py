@@ -3152,7 +3152,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     import io
 
-    PORT = 7860
+    PORT = int(os.environ.get("PORT", 5000))
 
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
@@ -3177,8 +3177,8 @@ if __name__ == "__main__":
     # 2. Iniciar hilo de restauración
     threading.Thread(target=restore_on_boot, daemon=True).start()
 
-    # 3. Configurar el servidor (Forzado a 7860 para Hugging Face)
-    _HF_PORT = 7860
+    # 3. Configurar el servidor
+    _HF_PORT = PORT
     server = HTTPServer(("0.0.0.0", _HF_PORT), Handler)
 
     print(f"  OK Servidor HTTP escuchando en :{_HF_PORT}")
