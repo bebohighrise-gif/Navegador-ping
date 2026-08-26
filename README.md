@@ -8,6 +8,12 @@ El servicio exige `X-API-Key` y compara la clave con una comparación constante.
 
 El contenedor se ejecuta como el usuario sin privilegios `bebo`. Cada comando tiene un tiempo máximo, salida limitada y un entorno mínimo. El objetivo es ofrecer una consola de desarrollo útil, no una VM Linux ni acceso administrativo al sistema.
 
+## Acceso privado y credenciales
+
+La web está protegida por una contraseña de propietario configurada en `BEBO_ADMIN_PASSWORD`. Tras iniciar sesión en `/`, BEBO crea automáticamente una API key en memoria y la entrega en la sesión privada. Para conservar la misma API key después de reinicios o nuevos despliegues, copia esa clave en Render como `BEBO_API_KEY`; si se deja vacía, se generará una clave nueva al iniciar el contenedor. La contraseña nunca se muestra ni se guarda en el repositorio.
+
+La sesión se mantiene en una cookie HttpOnly, SameSite Strict y con duración limitada. Los endpoints privados aceptan la sesión web o la API key en el header `X-API-Key`.
+
 ## Desarrollo local
 
 ```bash

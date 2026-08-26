@@ -7,6 +7,8 @@ services:
     envVars:
       - key: BEBO_API_KEY
         sync: false
+      - key: BEBO_ADMIN_PASSWORD
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       - key: WORKSPACE_DIR
