@@ -28,11 +28,21 @@ La interfaz está disponible en `http://localhost:10000` y la documentación Ope
 
 El repositorio incluye `Dockerfile` y `render.yaml`. En Render, crea un Web Service desde este repositorio, selecciona el plan Free y define una variable secreta `BEBO_API_KEY` con una clave larga y aleatoria. Render asigna automáticamente `PORT`.
 
-El workspace predeterminado es `/tmp/bebo-workspace`, por lo que los archivos locales pueden perderse tras reinicios o nuevos despliegues. Para datos persistentes, la próxima capa debe conectar PostgreSQL mediante `DATABASE_URL` y un almacenamiento de objetos externo. No debe utilizarse SQLite ni guardar secretos en el repositorio.
+El workspace predeterminado es `/tmp/bebo-workspace`, por lo que los archivos locales pueden perderse tras reinicios o nuevos despliegues. `DATABASE_URL` ya está preparada para persistir el panel de APIs, pero **los archivos del workspace todavía no están sincronizados con almacenamiento de objetos externo**. No debe utilizarse SQLite ni guardar secretos en el repositorio. Para no perder archivos, la siguiente integración debe conectar S3/R2/Supabase Storage mediante variables secretas y guardar allí cada archivo antes de confirmar la operación.
+
+## Panel privado de APIs
+
+Después de iniciar sesión, el panel **Mis APIs** permite crear una API con nombre, generar automáticamente una clave independiente, regenerarla —revocando la anterior— y eliminarla. Las claves se almacenan como hashes SHA-256 y nunca se muestran en el listado. La clave completa aparece únicamente al crearla o regenerarla.
+
+Los endpoints son `GET /api/apis`, `POST /api/apis`, `POST /api/apis/{id}/regenerate` y `DELETE /api/apis/{id}`. Si `DATABASE_URL` está configurada, los nombres, hashes, estados y fechas se guardan en PostgreSQL externo. Sin `DATABASE_URL`, funcionan solo temporalmente en memoria.
 
 ## API principal
 
 `GET /health` comprueba el servicio sin autenticación. `POST /api/exec` ejecuta un comando seguro usando `command`, `args`, `cwd` y `timeout_seconds`. `GET /api/files/list` lista el workspace. `GET /api/files/read` lee archivos pequeños y `PUT /api/files/write` guarda archivos dentro del workspace. `GET /api/security` devuelve el estado de las barreras activas.
+
+## Cobertura del prompt original
+
+Esta versión implementa el núcleo seguro: login de propietario, generación y gestión de APIs, autenticación por API key, ejecución limitada de comandos, validación de rutas, lectura/escritura de archivos, interfaz web, Dockerfile y despliegue en Render. **No implementa todavía todas las capacidades del prompt original**. Quedan pendientes el almacenamiento externo de archivos, proyectos persistentes en PostgreSQL, tmux, procesos en background, cron persistente, streaming SSE, proxy/ngrok, SSH/SCP/RSYNC, instalación de lenguajes, administración de procesos, usuarios múltiples, Git avanzado, compilación, depuración, cifrado, backups y una shell Bash/Zsh arbitraria. Estas funciones no deben activarse sin un sandbox aislado y límites de seguridad adicionales.
 
 ## Limitaciones de Render Free
 

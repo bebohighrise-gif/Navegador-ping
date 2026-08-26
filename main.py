@@ -10,6 +10,7 @@ import secrets
 import shutil
 import signal
 import time
+import uuid
 from pathlib import Path
 from typing import Annotated
 
@@ -28,6 +29,9 @@ ADMIN_PASSWORD = os.getenv("BEBO_ADMIN_PASSWORD", "")
 # Se genera automáticamente si no se define en Render. Para conservarla entre
 # reinicios, copia la primera clave mostrada en Render como BEBO_API_KEY.
 API_KEY = os.getenv("BEBO_API_KEY") or secrets.token_urlsafe(32)
+DB_URL = os.getenv("DATABASE_URL", "").strip()
+DB_POOL = None
+API_RECORDS: dict[str, dict] = {}
 SESSIONS: dict[str, float] = {}
 SESSION_TTL = 8 * 60 * 60
 
@@ -70,16 +74,25 @@ def require_session(session: Annotated[str | None, Cookie(alias="bebo_session")]
     return session or ""
 
 
-def require_api_key(value: Annotated[str | None, Header(alias="X-API-Key")] = None) -> str:
-    if not value or not hmac.compare_digest(value, API_KEY):
+async def valid_api_key(value: str | None) -> bool:
+    if not value:
+        return False
+    if hmac.compare_digest(value, API_KEY):
+        return True
+    digest = key_digest(value)
+    return any(item.get("is_active") and hmac.compare_digest(item.get("key_hash", ""), digest) for item in await load_api_records())
+
+
+async def require_api_key(value: Annotated[str | None, Header(alias="X-API-Key")] = None) -> str:
+    if not await valid_api_key(value):
         raise HTTPException(401, "API key inválida")
-    return value
+    return value or ""
 
 
-def require_private_access(request: Request, session: Annotated[str | None, Cookie(alias="bebo_session")] = None, value: Annotated[str | None, Header(alias="X-API-Key")] = None) -> str:
+async def require_private_access(request: Request, session: Annotated[str | None, Cookie(alias="bebo_session")] = None, value: Annotated[str | None, Header(alias="X-API-Key")] = None) -> str:
     if session_ok(session):
         return "session"
-    if value and hmac.compare_digest(value, API_KEY):
+    if await valid_api_key(value):
         return "api-key"
     raise HTTPException(401, "Autenticación requerida")
 
@@ -106,6 +119,43 @@ def validate_args(args: list[str]) -> list[str]:
 
 class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
+
+
+class ApiCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+def key_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+async def load_api_records() -> list[dict]:
+    if DB_POOL:
+        rows = await DB_POOL.fetch("SELECT id, name, key_hash, is_active, created_at, updated_at FROM bebo_api_keys ORDER BY created_at DESC")
+        return [dict(row) for row in rows]
+    return list(API_RECORDS.values())
+
+
+async def save_api_record(record: dict) -> None:
+    API_RECORDS[record["id"]] = record
+    if DB_POOL:
+        await DB_POOL.execute("""INSERT INTO bebo_api_keys(id,name,key_hash,is_active,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET name=$2,key_hash=$3,is_active=$4,updated_at=$6""", record["id"], record["name"], record["key_hash"], record["is_active"], record["created_at"], record["updated_at"])
+
+
+@app.on_event("startup")
+async def initialize_storage() -> None:
+    global DB_POOL
+    if not DB_URL:
+        return
+    try:
+        import asyncpg
+        DB_POOL = await asyncpg.create_pool(DB_URL, min_size=1, max_size=3)
+        await DB_POOL.execute("""CREATE TABLE IF NOT EXISTS bebo_api_keys (id TEXT PRIMARY KEY, name TEXT NOT NULL, key_hash TEXT NOT NULL, is_active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL)""")
+        for record in await load_api_records():
+            API_RECORDS[record["id"]] = record
+    except Exception as exc:
+        DB_POOL = None
+        print(f"[bebo] PostgreSQL no disponible; APIs nuevas serán temporales: {exc}")
 
 
 class ExecRequest(BaseModel):
@@ -159,6 +209,44 @@ async def me(_: str = Depends(require_session)) -> dict:
 @app.get("/api/credentials")
 async def credentials(_: str = Depends(require_session)) -> dict:
     return {"api_key": API_KEY, "generated": not bool(os.getenv("BEBO_API_KEY")), "warning": "Guárdala como BEBO_API_KEY en Render para conservarla tras reinicios." if not os.getenv("BEBO_API_KEY") else ""}
+
+
+@app.get("/api/apis")
+async def list_apis(_: str = Depends(require_session)) -> list[dict]:
+    return [{"id": item["id"], "name": item["name"], "is_active": item["is_active"], "created_at": str(item["created_at"]), "updated_at": str(item["updated_at"])} for item in await load_api_records()]
+
+
+@app.post("/api/apis")
+async def create_api(payload: ApiCreateRequest, _: str = Depends(require_session)) -> dict:
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    raw_key = "bebo_" + secrets.token_urlsafe(32)
+    record = {"id": str(uuid.uuid4()), "name": payload.name.strip(), "key_hash": key_digest(raw_key), "is_active": True, "created_at": now, "updated_at": now}
+    await save_api_record(record)
+    return {"id": record["id"], "name": record["name"], "api_key": raw_key, "warning": "Guarda esta clave; por seguridad no volverá a mostrarse completa."}
+
+
+@app.post("/api/apis/{api_id}/regenerate")
+async def regenerate_api(api_id: str, _: str = Depends(require_session)) -> dict:
+    records = await load_api_records()
+    record = next((x for x in records if x["id"] == api_id), None)
+    if not record:
+        raise HTTPException(404, "API no encontrada")
+    raw_key = "bebo_" + secrets.token_urlsafe(32)
+    record["key_hash"] = key_digest(raw_key); record["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    await save_api_record(record)
+    return {"id": api_id, "name": record["name"], "api_key": raw_key, "warning": "La clave anterior fue revocada."}
+
+
+@app.delete("/api/apis/{api_id}")
+async def delete_api(api_id: str, _: str = Depends(require_session)) -> dict:
+    if api_id not in API_RECORDS and not DB_POOL:
+        raise HTTPException(404, "API no encontrada")
+    if DB_POOL:
+        result = await DB_POOL.execute("DELETE FROM bebo_api_keys WHERE id=$1", api_id)
+        if result.endswith("0"):
+            raise HTTPException(404, "API no encontrada")
+    API_RECORDS.pop(api_id, None)
+    return {"ok": True, "id": api_id}
 
 
 @app.get("/api/config")

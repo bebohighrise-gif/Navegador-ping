@@ -9,6 +9,8 @@ services:
         sync: false
       - key: BEBO_ADMIN_PASSWORD
         sync: false
+      - key: DATABASE_URL
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       - key: WORKSPACE_DIR
