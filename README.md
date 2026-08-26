@@ -28,13 +28,13 @@ La interfaz está disponible en `http://localhost:10000` y la documentación Ope
 
 El repositorio incluye `Dockerfile` y `render.yaml`. En Render, crea un Web Service desde este repositorio, selecciona el plan Free y define una variable secreta `BEBO_API_KEY` con una clave larga y aleatoria. Render asigna automáticamente `PORT`.
 
-El workspace predeterminado es `/tmp/bebo-workspace`, por lo que los archivos locales pueden perderse tras reinicios o nuevos despliegues. `DATABASE_URL` ya está preparada para persistir el panel de APIs, pero **los archivos del workspace todavía no están sincronizados con almacenamiento de objetos externo**. No debe utilizarse SQLite ni guardar secretos en el repositorio. Para no perder archivos, la siguiente integración debe conectar S3/R2/Supabase Storage mediante variables secretas y guardar allí cada archivo antes de confirmar la operación.
+El workspace predeterminado es `/tmp/bebo-workspace`, por lo que los archivos locales pueden perderse tras reinicios o nuevos despliegues. La nueva D1 de Cloudflare `navegador-ping-bebo-db` tiene el ID `642e3286-81b5-4821-90b3-7713b0e504f0`; su esquema está versionado en `d1-schema.sql`. BEBO puede consultar D1 mediante la API HTTP de Cloudflare cuando configures `CLOUDFLARE_ACCOUNT_ID` y `CLOUDFLARE_API_TOKEN`, pero **los archivos del workspace todavía no están sincronizados con almacenamiento de objetos externo**. No debe utilizarse SQLite ni guardar secretos en el repositorio. El token de Cloudflare debe ser un secreto de Render con permisos mínimos para D1. Para no perder archivos, la siguiente integración debe conectar S3/R2/Supabase Storage mediante variables secretas y guardar allí cada archivo antes de confirmar la operación.
 
 ## Panel privado de APIs
 
 Después de iniciar sesión, el panel **Mis APIs** permite crear una API con nombre, generar automáticamente una clave independiente, regenerarla —revocando la anterior— y eliminarla. Las claves se almacenan como hashes SHA-256 y nunca se muestran en el listado. La clave completa aparece únicamente al crearla o regenerarla.
 
-Los endpoints son `GET /api/apis`, `POST /api/apis`, `POST /api/apis/{id}/regenerate` y `DELETE /api/apis/{id}`. Si `DATABASE_URL` está configurada, los nombres, hashes, estados y fechas se guardan en PostgreSQL externo. Sin `DATABASE_URL`, funcionan solo temporalmente en memoria.
+Los endpoints son `GET /api/apis`, `POST /api/apis`, `POST /api/apis/{id}/regenerate` y `DELETE /api/apis/{id}`. Si `DATABASE_URL` está configurada, los nombres, hashes, estados y fechas se guardan en PostgreSQL externo. Si configuras D1, BEBO usa la nueva base de Cloudflare como prioridad. Sin PostgreSQL ni D1 configurados, funcionan solo temporalmente en memoria.
 
 ## API principal
 

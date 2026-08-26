@@ -8,7 +8,7 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin bebo
 WORKDIR /app
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir fastapi 'uvicorn[standard]' pydantic asyncpg
+RUN pip install --no-cache-dir fastapi 'uvicorn[standard]' pydantic asyncpg httpx
 COPY --chown=bebo:bebo . .
 
 USER bebo

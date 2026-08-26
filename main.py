@@ -30,6 +30,9 @@ ADMIN_PASSWORD = os.getenv("BEBO_ADMIN_PASSWORD", "")
 # reinicios, copia la primera clave mostrada en Render como BEBO_API_KEY.
 API_KEY = os.getenv("BEBO_API_KEY") or secrets.token_urlsafe(32)
 DB_URL = os.getenv("DATABASE_URL", "").strip()
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+CLOUDFLARE_D1_DATABASE_ID = os.getenv("CLOUDFLARE_D1_DATABASE_ID", "642e3286-81b5-4821-90b3-7713b0e504f0").strip()
+CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
 DB_POOL = None
 API_RECORDS: dict[str, dict] = {}
 SESSIONS: dict[str, float] = {}
@@ -129,7 +132,24 @@ def key_digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+async def d1_query(sql: str, params: list | None = None) -> list[dict]:
+    if not (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_D1_DATABASE_ID and CLOUDFLARE_API_TOKEN):
+        return []
+    import httpx
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/d1/database/{CLOUDFLARE_D1_DATABASE_ID}/query"
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(url, headers={"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"}, json={"sql": sql, "params": params or []})
+        response.raise_for_status()
+        body = response.json()
+        if not body.get("success"):
+            raise RuntimeError(str(body.get("errors")))
+        result = body.get("result") or []
+        return (result[0].get("results") or []) if result else []
+
+
 async def load_api_records() -> list[dict]:
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        return await d1_query("SELECT id, name, key_hash, is_active, created_at, updated_at FROM api_keys ORDER BY created_at DESC")
     if DB_POOL:
         rows = await DB_POOL.fetch("SELECT id, name, key_hash, is_active, created_at, updated_at FROM bebo_api_keys ORDER BY created_at DESC")
         return [dict(row) for row in rows]
@@ -138,6 +158,9 @@ async def load_api_records() -> list[dict]:
 
 async def save_api_record(record: dict) -> None:
     API_RECORDS[record["id"]] = record
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        await d1_query("INSERT INTO api_keys(id,name,key_hash,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,key_hash=excluded.key_hash,is_active=excluded.is_active,updated_at=excluded.updated_at", [record["id"], record["name"], record["key_hash"], 1 if record["is_active"] else 0, record["created_at"], record["updated_at"]])
+        return
     if DB_POOL:
         await DB_POOL.execute("""INSERT INTO bebo_api_keys(id,name,key_hash,is_active,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET name=$2,key_hash=$3,is_active=$4,updated_at=$6""", record["id"], record["name"], record["key_hash"], record["is_active"], record["created_at"], record["updated_at"])
 
@@ -145,6 +168,14 @@ async def save_api_record(record: dict) -> None:
 @app.on_event("startup")
 async def initialize_storage() -> None:
     global DB_POOL
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        try:
+            await d1_query("CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, name TEXT NOT NULL, key_hash TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
+            for record in await load_api_records():
+                API_RECORDS[record["id"]] = record
+        except Exception as exc:
+            print(f"[bebo] D1 no disponible: {exc}")
+        return
     if not DB_URL:
         return
     try:
@@ -239,9 +270,11 @@ async def regenerate_api(api_id: str, _: str = Depends(require_session)) -> dict
 
 @app.delete("/api/apis/{api_id}")
 async def delete_api(api_id: str, _: str = Depends(require_session)) -> dict:
-    if api_id not in API_RECORDS and not DB_POOL:
+    if api_id not in API_RECORDS and not DB_POOL and not (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN):
         raise HTTPException(404, "API no encontrada")
-    if DB_POOL:
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        await d1_query("DELETE FROM api_keys WHERE id=?", [api_id])
+    elif DB_POOL:
         result = await DB_POOL.execute("DELETE FROM bebo_api_keys WHERE id=$1", api_id)
         if result.endswith("0"):
             raise HTTPException(404, "API no encontrada")

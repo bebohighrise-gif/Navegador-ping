@@ -11,6 +11,12 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_D1_DATABASE_ID
+        value: 642e3286-81b5-4821-90b3-7713b0e504f0
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       - key: WORKSPACE_DIR
