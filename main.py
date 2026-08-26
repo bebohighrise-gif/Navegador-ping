@@ -46,6 +46,12 @@ COMMANDS: dict[str, tuple[str, ...]] = {
     "go": ("go",), "rustc": ("rustc",), "cargo": ("cargo",), "java": ("java",),
     "javac": ("javac",), "ruby": ("ruby",), "php": ("php",), "perl": ("perl",),
     "date": ("date",), "whoami": ("whoami",), "uname": ("uname",),
+    "pytest": ("pytest",), "ruff": ("ruff",), "black": ("black",), "mypy": ("mypy",),
+    "pip": ("pip", "pip3"), "pipx": ("pipx",), "uv": ("uv",),
+    "pnpm": ("pnpm",), "yarn": ("yarn",), "vite": ("vite",), "deno": ("deno",), "bun": ("bun",),
+    "gcc": ("gcc",), "g++": ("g++",), "clang": ("clang",), "make": ("make",),
+    "cmake": ("cmake",), "mvn": ("mvn",), "gradle": ("gradle",), "dotnet": ("dotnet",),
+    "swift": ("swift",), "kotlin": ("kotlin",),
 }
 
 app = FastAPI(title="BEBO Safe API", version="1.1.0", docs_url="/docs", redoc_url=None)
@@ -280,6 +286,12 @@ async def delete_api(api_id: str, _: str = Depends(require_session)) -> dict:
             raise HTTPException(404, "API no encontrada")
     API_RECORDS.pop(api_id, None)
     return {"ok": True, "id": api_id}
+
+
+@app.get("/api/capabilities")
+async def capabilities(_: str = Depends(require_private_access)) -> dict:
+    available = {name: any(shutil.which(exe) for exe in variants) for name, variants in COMMANDS.items()}
+    return {"safe_mode": True, "available_commands": [name for name, ok in available.items() if ok], "unavailable_commands": [name for name, ok in available.items() if not ok], "persistent_storage": bool(DB_POOL or (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN)), "workspace_persistent": False, "background_processes": False, "network_shell": False}
 
 
 @app.get("/api/config")
