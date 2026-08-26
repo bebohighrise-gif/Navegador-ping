@@ -1,9 +1,16 @@
 [project]
-name = "nexhost"
-version = "0.1.0"
-description = "NexHost - Motor de hosting"
-requires-python = ">=3.12"
+name = "bebo-safe-api"
+version = "1.0.0"
+description = "BEBO Safe API: terminal web controlada para Render Free"
+requires-python = ">=3.11"
 dependencies = [
-    "huggingface-hub>=0.20.0",
-    "requests>=2.31.0",
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "pydantic>=2.8,<3",
+]
+
+[tool.uv]
+dev-dependencies = [
+  "httpx>=0.27,<1",
+  "pytest>=8,<9",
 ]

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: bebo-safe-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: BEBO_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: WORKSPACE_DIR
+        value: /tmp/bebo-workspace
+      - key: MAX_EXEC_SECONDS
+        value: "20"
+      - key: MAX_OUTPUT_BYTES
+        value: "200000"

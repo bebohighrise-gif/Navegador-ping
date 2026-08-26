@@ -1,59 +1,16 @@
-# ═══════════════════════════════════════════════════
-#   NexHost v3 — Dockerfile optimizado
-#   Cambios clave:
-#   ✅ uv preinstalado → sin descarga en cada arranque
-#   ✅ mise preinstalado → sin descarga en cada arranque
-#   ✅ Sin gcc/g++/build-essential (innecesarios)
-#   ✅ Sin libssl-dev/libffi-dev (innecesarios)
-#   ✅ Arranque en frío ~10x más rápido
-# ═══════════════════════════════════════════════════
-
 FROM python:3.11-slim
 
-# Evitar prompts interactivos
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-# Solo dependencias esenciales — sin compiladores innecesarios
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl wget ca-certificates \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# ── Instalar uv (gestor de paquetes Python ultrarrápido) ──
-# Se instala como root en la imagen → no se vuelve a descargar al arrancar
-RUN curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
-
-# ── Instalar mise (gestor universal de runtimes: Python, Node, Go…) ──
-# Se instala como root en la imagen → no se vuelve a descargar al arrancar
-RUN curl https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
-
-# Verificar instalaciones
-RUN uv --version && mise --version
-
-# Actualizar pip e instalar huggingface_hub
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir huggingface_hub
-
-# ── Usuario estándar de Hugging Face (UID 1000) ──
-RUN useradd -m -u 1000 usuario
-USER usuario
-
-# Variables de entorno del usuario
-ENV HOME=/home/usuario
-ENV PATH=/home/usuario/.local/bin:/usr/local/bin:$PATH
-
-# mise: directorios de datos en home del usuario
-ENV MISE_DATA_DIR=/home/usuario/.local/share/mise
-ENV MISE_CACHE_DIR=/home/usuario/.local/share/mise/cache
-ENV MISE_CONFIG_DIR=/home/usuario/.config/mise
-
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin bebo
 WORKDIR /app
 
-# Copiar archivos con permisos correctos
-COPY --chown=usuario . .
+COPY pyproject.toml .
+RUN pip install --no-cache-dir fastapi 'uvicorn[standard]' pydantic
+COPY --chown=bebo:bebo . .
 
-# Puerto estándar de Hugging Face Spaces
-EXPOSE 7860
-
-CMD ["python", "main.py"]
+USER bebo
+EXPOSE 10000
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]
