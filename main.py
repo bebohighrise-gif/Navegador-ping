@@ -35,6 +35,9 @@ CLOUDFLARE_D1_DATABASE_ID = os.getenv("CLOUDFLARE_D1_DATABASE_ID", "642e3286-81b
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
 DB_POOL = None
 API_RECORDS: dict[str, dict] = {}
+COMMAND_HISTORY: list[dict] = []
+PROJECTS: dict[str, dict] = {}
+SCHEDULED_TASKS: dict[str, dict] = {}
 SESSIONS: dict[str, float] = {}
 SESSION_TTL = 8 * 60 * 60
 
@@ -214,6 +217,20 @@ class FileRequest(BaseModel):
     content: str = Field(default="", max_length=1_000_000)
 
 
+class ProjectRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    command_line: str = Field(min_length=1, max_length=300)
+    cwd: str = Field(default=".", max_length=300)
+    port_internal: int | None = Field(default=None, ge=1024, le=65535)
+
+
+class TaskRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    command_line: str = Field(min_length=1, max_length=300)
+    cron_expr: str = Field(min_length=5, max_length=80)
+    cwd: str = Field(default=".", max_length=300)
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": "bebo", "private": True}
@@ -288,6 +305,57 @@ async def delete_api(api_id: str, _: str = Depends(require_session)) -> dict:
     return {"ok": True, "id": api_id}
 
 
+@app.get("/api/projects")
+async def list_projects(_: str = Depends(require_private_access)) -> list[dict]:
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        return await d1_query("SELECT id,name,command_line,cwd,status,port_internal,created_at,updated_at FROM projects ORDER BY created_at DESC")
+    return list(PROJECTS.values())
+
+
+@app.post("/api/projects")
+async def create_project(payload: ProjectRequest, _: str = Depends(require_session)) -> dict:
+    safe_path(payload.cwd)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()); item = {"id": str(uuid.uuid4()), "name": payload.name.strip(), "command_line": payload.command_line.strip(), "cwd": payload.cwd, "status": "stopped", "port_internal": payload.port_internal, "created_at": now, "updated_at": now}
+    PROJECTS[item["id"]] = item
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        await d1_query("INSERT INTO projects(id,name,command_line,cwd,status,port_internal,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", [item["id"], item["name"], item["command_line"], item["cwd"], item["status"], item["port_internal"], now, now])
+    return item
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str, _: str = Depends(require_session)) -> dict:
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        await d1_query("DELETE FROM projects WHERE id=?", [project_id])
+    elif project_id not in PROJECTS:
+        raise HTTPException(404, "Proyecto no encontrado")
+    PROJECTS.pop(project_id, None); return {"ok": True, "id": project_id}
+
+
+@app.get("/api/tasks")
+async def list_tasks(_: str = Depends(require_private_access)) -> list[dict]:
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        return await d1_query("SELECT id,name,command_line,cron_expr,cwd,is_active,last_run,next_run FROM scheduled_tasks ORDER BY name")
+    return list(SCHEDULED_TASKS.values())
+
+
+@app.post("/api/tasks")
+async def create_task(payload: TaskRequest, _: str = Depends(require_session)) -> dict:
+    safe_path(payload.cwd); now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()); item = {"id": str(uuid.uuid4()), "name": payload.name.strip(), "command_line": payload.command_line.strip(), "cron_expr": payload.cron_expr.strip(), "cwd": payload.cwd, "is_active": True, "last_run": None, "next_run": None, "created_at": now}
+    SCHEDULED_TASKS[item["id"]] = item
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        await d1_query("INSERT INTO scheduled_tasks(id,name,command_line,cron_expr,cwd,is_active) VALUES(?,?,?,?,?,1)", [item["id"], item["name"], item["command_line"], item["cron_expr"], item["cwd"]])
+    return item
+
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_task(task_id: str, _: str = Depends(require_session)) -> dict:
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        await d1_query("DELETE FROM scheduled_tasks WHERE id=?", [task_id])
+    elif task_id not in SCHEDULED_TASKS:
+        raise HTTPException(404, "Tarea no encontrada")
+    SCHEDULED_TASKS.pop(task_id, None); return {"ok": True, "id": task_id}
+
+
 @app.get("/api/capabilities")
 async def capabilities(_: str = Depends(require_private_access)) -> dict:
     available = {name: any(shutil.which(exe) for exe in variants) for name, variants in COMMANDS.items()}
@@ -316,12 +384,41 @@ async def execute(payload: ExecRequest, _: str = Depends(require_private_access)
         except ProcessLookupError:
             pass
         raise HTTPException(408, "El comando superó el tiempo máximo")
-    return {"ok": proc.returncode == 0, "exit_code": proc.returncode, "stdout": stdout[:MAX_OUTPUT].decode(errors="replace"), "stderr": stderr[:MAX_OUTPUT].decode(errors="replace"), "cwd": str(cwd.relative_to(WORKSPACE))}
+    result = {"ok": proc.returncode == 0, "exit_code": proc.returncode, "stdout": stdout[:MAX_OUTPUT].decode(errors="replace"), "stderr": stderr[:MAX_OUTPUT].decode(errors="replace"), "cwd": str(cwd.relative_to(WORKSPACE))}
+    event = {"id": str(uuid.uuid4()), "command": payload.command, "cwd": result["cwd"], "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "exit_code": proc.returncode, "output": result["stdout"][:2000]}
+    COMMAND_HISTORY.insert(0, event); del COMMAND_HISTORY[100:]
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        await d1_query("INSERT INTO command_history(id,user_key_hash,command,cwd,timestamp,exit_code,output_ref) VALUES(?,?,?,?,?,?,?)", [event["id"], "owner", payload.command, event["cwd"], event["timestamp"], event["exit_code"], event["output"]])
+    return result
+
+
+@app.get("/api/history")
+async def history(_: str = Depends(require_private_access)) -> list[dict]:
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        return await d1_query("SELECT id, command, cwd, timestamp, exit_code, output_ref AS output FROM command_history ORDER BY timestamp DESC LIMIT 100")
+    return COMMAND_HISTORY
+
+
+@app.delete("/api/history")
+async def clear_history(_: str = Depends(require_session)) -> dict:
+    COMMAND_HISTORY.clear()
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        await d1_query("DELETE FROM command_history")
+    return {"ok": True}
 
 
 @app.get("/api/files/list")
 async def list_files(path: str = Query("."), _: str = Depends(require_private_access)) -> list[dict]:
     directory = safe_path(path)
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        prefix = "" if path in ("", ".") else path.strip("./") + "/"
+        rows = await d1_query("SELECT path, size, updated_at FROM workspace_files WHERE path LIKE ? ORDER BY path LIMIT 500", [prefix + "%"])
+        seen: dict[str, dict] = {}
+        for row in rows:
+            rest = row["path"][len(prefix):]
+            name = rest.split("/", 1)[0]
+            seen[name] = {"name": name, "type": "directory" if "/" in rest else "file", "size": None if "/" in rest else row["size"], "updated_at": row["updated_at"]}
+        return sorted(seen.values(), key=lambda x: (x["type"] != "directory", x["name"].lower()))
     if not directory.is_dir():
         raise HTTPException(404, "Directorio no encontrado")
     return [{"name": item.name, "type": "directory" if item.is_dir() else "file", "size": item.stat().st_size if item.is_file() else None} for item in sorted(directory.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))[:500]]
@@ -330,6 +427,12 @@ async def list_files(path: str = Query("."), _: str = Depends(require_private_ac
 @app.get("/api/files/read")
 async def read_file(path: str, _: str = Depends(require_private_access)) -> dict:
     target = safe_path(path)
+    relative = str(target.relative_to(WORKSPACE))
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        rows = await d1_query("SELECT path, content, size, updated_at FROM workspace_files WHERE path=?", [relative])
+        if not rows:
+            raise HTTPException(404, "Archivo no encontrado")
+        return {"path": relative, "content": rows[0]["content"], "size": rows[0]["size"], "updated_at": rows[0]["updated_at"]}
     if not target.is_file():
         raise HTTPException(404, "Archivo no encontrado")
     if target.stat().st_size > 1_000_000:
@@ -340,9 +443,16 @@ async def read_file(path: str, _: str = Depends(require_private_access)) -> dict
 @app.put("/api/files/write")
 async def write_file(payload: FileRequest, _: str = Depends(require_private_access)) -> dict:
     target = safe_path(payload.path)
+    relative = str(target.relative_to(WORKSPACE))
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        if len(payload.content.encode("utf-8")) > 900_000:
+            raise HTTPException(413, "Archivo demasiado grande para almacenamiento D1")
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        await d1_query("INSERT INTO workspace_files(path,content,size,updated_at) VALUES(?,?,?,?) ON CONFLICT(path) DO UPDATE SET content=excluded.content,size=excluded.size,updated_at=excluded.updated_at", [relative, payload.content, len(payload.content.encode("utf-8")), now])
+        return {"ok": True, "path": relative, "bytes": len(payload.content.encode("utf-8")), "persistent": True}
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(payload.content, encoding="utf-8")
-    return {"ok": True, "path": payload.path, "bytes": target.stat().st_size}
+    return {"ok": True, "path": payload.path, "bytes": target.stat().st_size, "persistent": False}
 
 
 @app.get("/api/security")
