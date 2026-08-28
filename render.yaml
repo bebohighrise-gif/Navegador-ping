@@ -17,6 +17,14 @@ services:
         value: 642e3286-81b5-4821-90b3-7713b0e504f0
       - key: CLOUDFLARE_API_TOKEN
         sync: false
+      - key: R2_BUCKET
+        value: navegador-ping-bebo-files
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       - key: WORKSPACE_DIR

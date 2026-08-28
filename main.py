@@ -33,6 +33,10 @@ DB_URL = os.getenv("DATABASE_URL", "").strip()
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
 CLOUDFLARE_D1_DATABASE_ID = os.getenv("CLOUDFLARE_D1_DATABASE_ID", "642e3286-81b5-4821-90b3-7713b0e504f0").strip()
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+R2_BUCKET = os.getenv("R2_BUCKET", "navegador-ping-bebo-files").strip()
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
+R2_ENDPOINT = os.getenv("R2_ENDPOINT", f"https://{CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com").strip()
 DB_POOL = None
 API_RECORDS: dict[str, dict] = {}
 COMMAND_HISTORY: list[dict] = []
@@ -139,6 +143,35 @@ class ApiCreateRequest(BaseModel):
 
 def key_digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def r2_enabled() -> bool:
+    return bool(R2_BUCKET and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_ENDPOINT and not R2_ENDPOINT.endswith("None.r2.cloudflarestorage.com"))
+
+
+def r2_client():
+    import boto3
+    return boto3.client("s3", endpoint_url=R2_ENDPOINT, aws_access_key_id=R2_ACCESS_KEY_ID, aws_secret_access_key=R2_SECRET_ACCESS_KEY, region_name="auto")
+
+
+async def r2_put(path: str, content: str) -> None:
+    await asyncio.to_thread(lambda: r2_client().put_object(Bucket=R2_BUCKET, Key=path, Body=content.encode("utf-8"), ContentType="text/plain; charset=utf-8"))
+
+
+async def r2_get(path: str) -> str | None:
+    def fetch():
+        try:
+            return r2_client().get_object(Bucket=R2_BUCKET, Key=path)["Body"].read().decode("utf-8", errors="replace")
+        except Exception:
+            return None
+    return await asyncio.to_thread(fetch)
+
+
+async def r2_list(prefix: str) -> list[dict]:
+    def fetch():
+        response = r2_client().list_objects_v2(Bucket=R2_BUCKET, Prefix=prefix)
+        return [{"path": x["Key"], "size": x.get("Size", 0), "updated_at": x.get("LastModified", "")} for x in response.get("Contents", [])]
+    return await asyncio.to_thread(fetch)
 
 
 async def d1_query(sql: str, params: list | None = None) -> list[dict]:
@@ -359,7 +392,7 @@ async def delete_task(task_id: str, _: str = Depends(require_session)) -> dict:
 @app.get("/api/capabilities")
 async def capabilities(_: str = Depends(require_private_access)) -> dict:
     available = {name: any(shutil.which(exe) for exe in variants) for name, variants in COMMANDS.items()}
-    return {"safe_mode": True, "available_commands": [name for name, ok in available.items() if ok], "unavailable_commands": [name for name, ok in available.items() if not ok], "persistent_storage": bool(DB_POOL or (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN)), "workspace_persistent": False, "background_processes": False, "network_shell": False}
+    return {"safe_mode": True, "available_commands": [name for name, ok in available.items() if ok], "unavailable_commands": [name for name, ok in available.items() if not ok], "persistent_storage": bool(DB_POOL or (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN) or r2_enabled()), "workspace_persistent": bool(r2_enabled() or (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN)), "storage_backend": "r2" if r2_enabled() else ("cloudflare-d1" if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN else ("postgresql" if DB_POOL else "ephemeral")), "background_processes": False, "network_shell": False}
 
 
 @app.get("/api/config")
@@ -410,6 +443,14 @@ async def clear_history(_: str = Depends(require_session)) -> dict:
 @app.get("/api/files/list")
 async def list_files(path: str = Query("."), _: str = Depends(require_private_access)) -> list[dict]:
     directory = safe_path(path)
+    if r2_enabled():
+        prefix = "" if path in ("", ".") else path.strip("./") + "/"
+        rows = await r2_list(prefix)
+        seen: dict[str, dict] = {}
+        for row in rows:
+            rest = row["path"][len(prefix):]; name = rest.split("/", 1)[0]
+            seen[name] = {"name": name, "type": "directory" if "/" in rest else "file", "size": None if "/" in rest else row["size"], "updated_at": str(row["updated_at"])}
+        return sorted(seen.values(), key=lambda x: (x["type"] != "directory", x["name"].lower()))
     if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
         prefix = "" if path in ("", ".") else path.strip("./") + "/"
         rows = await d1_query("SELECT path, size, updated_at FROM workspace_files WHERE path LIKE ? ORDER BY path LIMIT 500", [prefix + "%"])
@@ -428,11 +469,20 @@ async def list_files(path: str = Query("."), _: str = Depends(require_private_ac
 async def read_file(path: str, _: str = Depends(require_private_access)) -> dict:
     target = safe_path(path)
     relative = str(target.relative_to(WORKSPACE))
+    if r2_enabled():
+        content = await r2_get(relative)
+        if content is None:
+            raise HTTPException(404, "Archivo no encontrado")
+        return {"path": relative, "content": content, "size": len(content.encode("utf-8")), "persistent": True, "storage": "r2"}
     if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
         rows = await d1_query("SELECT path, content, size, updated_at FROM workspace_files WHERE path=?", [relative])
-        if not rows:
+        if rows:
+            return {"path": relative, "content": rows[0]["content"], "size": rows[0]["size"], "updated_at": rows[0]["updated_at"]}
+        chunks = await d1_query("SELECT chunk_index, content, updated_at FROM workspace_file_chunks WHERE path=? ORDER BY chunk_index", [relative])
+        if not chunks:
             raise HTTPException(404, "Archivo no encontrado")
-        return {"path": relative, "content": rows[0]["content"], "size": rows[0]["size"], "updated_at": rows[0]["updated_at"]}
+        content = "".join(row["content"] for row in chunks)
+        return {"path": relative, "content": content, "size": len(content.encode("utf-8")), "updated_at": chunks[-1]["updated_at"], "persistent": True, "storage": "cloudflare-d1-chunks"}
     if not target.is_file():
         raise HTTPException(404, "Archivo no encontrado")
     if target.stat().st_size > 1_000_000:
@@ -444,12 +494,24 @@ async def read_file(path: str, _: str = Depends(require_private_access)) -> dict
 async def write_file(payload: FileRequest, _: str = Depends(require_private_access)) -> dict:
     target = safe_path(payload.path)
     relative = str(target.relative_to(WORKSPACE))
+    if r2_enabled():
+        if len(payload.content.encode("utf-8")) > 10_000_000:
+            raise HTTPException(413, "Archivo demasiado grande")
+        await r2_put(relative, payload.content)
+        return {"ok": True, "path": relative, "bytes": len(payload.content.encode("utf-8")), "persistent": True, "storage": "r2"}
     if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
-        if len(payload.content.encode("utf-8")) > 900_000:
-            raise HTTPException(413, "Archivo demasiado grande para almacenamiento D1")
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        await d1_query("INSERT INTO workspace_files(path,content,size,updated_at) VALUES(?,?,?,?) ON CONFLICT(path) DO UPDATE SET content=excluded.content,size=excluded.size,updated_at=excluded.updated_at", [relative, payload.content, len(payload.content.encode("utf-8")), now])
-        return {"ok": True, "path": relative, "bytes": len(payload.content.encode("utf-8")), "persistent": True}
+        size = len(payload.content.encode("utf-8")); now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        if size <= 900_000:
+            await d1_query("DELETE FROM workspace_file_chunks WHERE path=?", [relative])
+            await d1_query("INSERT INTO workspace_files(path,content,size,updated_at) VALUES(?,?,?,?) ON CONFLICT(path) DO UPDATE SET content=excluded.content,size=excluded.size,updated_at=excluded.updated_at", [relative, payload.content, size, now])
+        else:
+            await d1_query("DELETE FROM workspace_files WHERE path=?", [relative]); await d1_query("DELETE FROM workspace_file_chunks WHERE path=?", [relative])
+            chunk_size = 100_000; chunks = [payload.content[i:i + chunk_size] for i in range(0, len(payload.content), chunk_size)]
+            if len(chunks) > 100:
+                raise HTTPException(413, "Archivo demasiado grande para almacenamiento D1")
+            for index, chunk in enumerate(chunks):
+                await d1_query("INSERT INTO workspace_file_chunks(path,chunk_index,content,updated_at) VALUES(?,?,?,?)", [relative, index, chunk, now])
+        return {"ok": True, "path": relative, "bytes": size, "persistent": True, "storage": "cloudflare-d1"}
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(payload.content, encoding="utf-8")
     return {"ok": True, "path": payload.path, "bytes": target.stat().st_size, "persistent": False}

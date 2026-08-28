@@ -50,3 +50,15 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
   next_run TEXT,
   is_active INTEGER NOT NULL DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS workspace_file_chunks (
+  path TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(path, chunk_index)
+);
+
+-- Los archivos pequeños usan workspace_files; los grandes pueden fragmentarse
+-- desde la API para no depender de un disco efímero de Render.
+
