@@ -1,31 +1,43 @@
 FROM ubuntu:24.04
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1 \
-    PORT=8080
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# Instalar dependencias, editores y librerías de ejecución
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash curl wget git unzip tar gcc make ca-certificates gnupg \
-    openssh-client tmux postgresql-client python3 python3-pip \
-    python3-venv python3-pytest nodejs npm nano vim \
-    && npm install -g npx \
-    && pip3 install --break-system-packages websockets \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3 /usr/bin/python
-
-# Crear usuario sin privilegios root
-RUN useradd -m -u 1001 -s /bin/bash renderuser && \
-    mkdir -p /workspace && chown renderuser:renderuser /workspace
-
-COPY server.py /workspace/server.py
-RUN chown renderuser:renderuser /workspace/server.py
+# Instalar dependencias de sistema, Python, Node.js, PostgreSQL client, Tmux y Chromium para Puppeteer
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    tmux \
+    python3 \
+    python3-pip \
+    python3-venv \
+    postgresql-client \
+    chromium-browser \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2t64 \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
-USER renderuser
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:$PORT/ || exit 1
+# Copiar configuración de dependencias e instalarlas
+COPY package.json /workspace/package.json
+RUN npm install
 
-EXPOSE $PORT
-CMD ["python3", "server.py"]
+# Copiar los scripts de la raíz al contenedor
+COPY . /workspace
+
+EXPOSE 8080
+
+# Iniciar el Router HTTP y el Servidor WebSocket de la terminal
+CMD ["bash", "-c", "node /workspace/router.js & python3 /workspace/server.py"]
