@@ -1,0 +1,17 @@
+{
+  "name": "bebo-host-router",
+  "version": "1.0.0",
+  "description": "Router y proxy inverso multi-proyecto para el sistema de hosting de Bebo",
+  "main": "router.js",
+  "scripts": {
+    "start": "node router.js"
+  },
+  "dependencies": {
+    "http-proxy": "^1.18.1",
+    "pg": "^8.11.3",
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
