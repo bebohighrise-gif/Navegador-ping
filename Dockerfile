@@ -4,17 +4,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PORT=8080
 
-# Instalar todas las dependencias incluyendo nodejs y npm desde los repos de Ubuntu
+# Instalar dependencias, editores y librerías de ejecución
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash curl wget git unzip tar gcc make ca-certificates gnupg \
     openssh-client tmux postgresql-client python3 python3-pip \
-    python3-venv python3-pytest nodejs npm \
+    python3-venv python3-pytest nodejs npm nano vim \
     && npm install -g npx \
+    && pip3 install --break-system-packages websockets \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
+# Crear usuario sin privilegios root
 RUN useradd -m -u 1001 -s /bin/bash renderuser && \
     mkdir -p /workspace && chown renderuser:renderuser /workspace
+
+COPY server.py /workspace/server.py
+RUN chown renderuser:renderuser /workspace/server.py
 
 WORKDIR /workspace
 USER renderuser
@@ -23,4 +28,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:$PORT/ || exit 1
 
 EXPOSE $PORT
-CMD ["python3", "-m", "http.server", "8080"]
+CMD ["python3", "server.py"]
