@@ -1,73 +1,55 @@
+import os
 import asyncio
 import json
-import os
 import pty
+import fcntl
+import termios
+import struct
 import websockets
 
-PORT = int(os.environ.get("PORT", 8080))
+PORT = int(os.environ.get("WS_PORT", 8765))
 
-async def handle_connection(websocket):
-    # Crear una pseudoterminal (PTY) interactiva en Linux
-    master_fd, slave_fd = pty.openpty()
+async def handle_client(websocket, path):
+    # Crear la pseudoterminal (PTY) bash
+    pid, master_fd = pty.fork()
     
-    # Iniciar la shell Bash en la PTY dentro de /workspace
-    proc = await asyncio.create_subprocess_exec(
-        '/bin/bash',
-        stdin=slave_fd,
-        stdout=slave_fd,
-        stderr=slave_fd,
-        cwd='/workspace',
-        preexec_fn=os.setsid
-    )
-    os.close(slave_fd)
+    if pid == 0:
+        # Proceso hijo: Iniciar bash interactivo en /workspace
+        os.chdir("/workspace")
+        os.execvp("bash", ["bash"])
+    else:
+        # Proceso padre: Manejar la entrada/salida de la terminal mediante WebSocket
+        flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+        fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
-    loop = asyncio.get_running_loop()
+        loop = asyncio.get_event_loop()
 
-    # Tarea 1: Leer la salida de Bash y transmitirla por WebSocket en tiempo real
-    async def stream_output():
-        while True:
+        def read_pty():
             try:
-                data = await loop.run_in_executor(None, os.read, master_fd, 1024)
-                if not data:
-                    break
-                await websocket.send(json.dumps({
-                    "type": "output",
-                    "data": data.decode('utf-8', errors='ignore')
-                }))
-            except Exception:
-                break
+                data = os.read(master_fd, 1024).decode('utf-8', errors='ignore')
+                if data:
+                    asyncio.create_task(websocket.send(json.dumps({"type": "output", "data": data})))
+            except (OSError, Exception):
+                pass
 
-    output_task = asyncio.create_task(stream_output())
+        loop.add_reader(master_fd, read_pty)
 
-    # Tarea 2: Recibir comandos por WebSocket y escribirlos en la PTY
-    try:
-        async for message in websocket:
-            payload = json.loads(message)
-            if payload.get("type") == "input":
-                cmd = payload.get("data", "")
-                os.write(master_fd, cmd.encode('utf-8'))
-    except websockets.exceptions.ConnectionClosed:
-        pass
-    finally:
-        output_task.cancel()
-        os.close(master_fd)
-        if proc.returncode is None:
-            proc.terminate()
+        try:
+            async for message in websocket:
+                payload = json.loads(message)
+                if payload.get("type") == "input":
+                    command = payload.get("data", "")
+                    os.write(master_fd, command.encode('utf-8'))
+        except websockets.exceptions.ConnectionClosed:
+            pass
+        finally:
+            loop.remove_reader(master_fd)
+            os.close(master_fd)
 
 async def main():
-    # Healthcheck HTTP básico en la misma puerto para Render
-    async def http_handler(path, request_headers):
-        if path == "/":
-            return (200, [("Content-Type", "text/plain")], b"OK\n")
-        return None
-
-    async with websockets.serve(
-        handle_connection,
-        "0.0.0.0",
-        PORT,
-        process_request=http_handler
-    ):
-        await asyncio.Future()  # Mantener servidor corriendo
+    async with websockets.serve(handle_client, "0.0.0.0", PORT):
+        print(f"[SERVER PTY] Servidor WebSocket ejecutándose en el puerto {PORT}")
+        await asyncio.Future()
 
 if __name__ == "__main__":
     asyncio.run(main())
