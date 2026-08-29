@@ -1,3 +1,6 @@
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 const http = require('http');
 const httpProxy = require('http-proxy');
 const { Client } = require('pg');
@@ -19,19 +22,17 @@ async function refreshRoutes() {
         await client.connect();
         const res = await client.query("SELECT subdominio, puerto FROM proyectos WHERE estado = 'activo'");
         
-        // Limpiar y actualizar la tabla de enrutamiento
         Object.keys(routeTable).forEach(key => delete routeTable[key]);
         res.rows.forEach(row => {
             routeTable[row.subdominio.toLowerCase()] = row.puerto;
         });
     } catch (err) {
-        console.error('[ROUTER] Error al sincronizar rutas desde la DB pasedata:', err.message);
+        console.error('[ROUTER] Error al sincronizar rutas desde la DB:', err.message);
     } finally {
         if (client) await client.end();
     }
 }
 
-// Sincronizar rutas al iniciar y cada 10 segundos
 refreshRoutes();
 setInterval(refreshRoutes, 10000);
 
@@ -46,7 +47,7 @@ const server = http.createServer((req, res) => {
         });
     } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Proyecto no encontrado o inactivo en pasedata', host: host }));
+        res.end(JSON.stringify({ error: 'Proyecto no encontrado o inactivo', host: host }));
     }
 });
 
