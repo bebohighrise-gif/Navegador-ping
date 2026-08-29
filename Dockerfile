@@ -3,7 +3,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# Instalar dependencias de sistema, Python, Node.js, PostgreSQL client, Tmux y Chromium para Puppeteer
+# Instalar dependencias de sistema, Python, Node.js, PostgreSQL client, Tmux y Chromium
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -28,13 +28,16 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Instalar dependencias requeridas para scripts de Python
+RUN pip3 install --break-system-packages websockets psycopg2-binary
+
 WORKDIR /workspace
 
-# Copiar configuración de dependencias e instalarlas
+# Copiar configuración de dependencias de Node e instalarlas
 COPY package.json /workspace/package.json
 RUN npm install
 
-# Copiar los scripts de la raíz al contenedor
+# Copiar el resto de los archivos
 COPY . /workspace
 
 EXPOSE 8080
