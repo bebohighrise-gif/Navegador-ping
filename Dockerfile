@@ -4,13 +4,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PORT=8080
 
-# Instalar dependencias base, configurar repositorio de Node.js e instalar Node.js en una sola capa
+# Instalar todas las dependencias incluyendo nodejs y npm desde los repos de Ubuntu
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash curl wget git unzip tar gcc make ca-certificates gnupg \
     openssh-client tmux postgresql-client python3 python3-pip \
-    python3-venv python3-pytest \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
+    python3-venv python3-pytest nodejs npm \
     && npm install -g npx \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3 /usr/bin/python
