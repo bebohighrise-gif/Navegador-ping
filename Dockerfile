@@ -7,7 +7,7 @@ FROM ubuntu:24.04
 #  Variables de entorno
 # ------------------------------------------------------------
 ENV DEBIAN_FRONTEND=noninteractive \
-    NODE_VERSION=20 \
+    NODE_VERSION=20.18.0 \
     PYTHONUNBUFFERED=1 \
     PORT=8080
 
@@ -37,19 +37,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
 # ------------------------------------------------------------
-#  2. Instalación de Node.js 20 LTS (método manual, sin script)
+#  2. Instalación de Node.js 20 LTS desde binario oficial
 # ------------------------------------------------------------
-#  Agregar clave GPG y repositorio oficial de NodeSource
-RUN mkdir -p /usr/share/keyrings \
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
-
-#  Actualizar e instalar Node.js y npx
-RUN apt-get update \
-    && apt-get install -y nodejs \
+RUN curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1 \
+    && ln -sf /usr/local/bin/node /usr/bin/node \
+    && ln -sf /usr/local/bin/npm /usr/bin/npm \
     && npm install -g npx \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && ln -sf /usr/local/bin/npx /usr/bin/npx
 
 # ------------------------------------------------------------
 #  3. Creación de usuario no root (seguridad)
@@ -72,8 +66,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 
 # ------------------------------------------------------------
 #  6. Comando de inicio (servidor HTTP en primer plano)
-#     tmux está instalado pero NO se usa en el CMD;
-#     puedes ejecutarlo manualmente con "docker exec -it" si lo necesitas.
 # ------------------------------------------------------------
 EXPOSE $PORT
 CMD python3 -m http.server $PORT
