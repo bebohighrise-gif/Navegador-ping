@@ -1,7 +1,7 @@
 {
-  "name": "bebo-host-router",
+  "name": "bebo-host-system",
   "version": "1.0.0",
-  "description": "Router y proxy inverso multi-proyecto para el sistema de hosting de Bebo",
+  "description": "Kernel de hosting multi-proyecto con proxy router, PTY terminal y Puppeteer",
   "main": "router.js",
   "scripts": {
     "start": "node router.js"
@@ -9,6 +9,7 @@
   "dependencies": {
     "http-proxy": "^1.18.1",
     "pg": "^8.11.3",
+    "puppeteer": "^22.0.0",
     "ws": "^8.16.0"
   },
   "engines": {
