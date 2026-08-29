@@ -37,9 +37,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
 # ------------------------------------------------------------
-#  2. Instalación de Node.js 20 LTS (método oficial)
+#  2. Instalación de Node.js 20 LTS (método manual, sin script)
 # ------------------------------------------------------------
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+#  Agregar clave GPG y repositorio oficial de NodeSource
+RUN mkdir -p /usr/share/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
+
+#  Actualizar e instalar Node.js y npx
+RUN apt-get update \
     && apt-get install -y nodejs \
     && npm install -g npx \
     && apt-get clean \
@@ -66,7 +72,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 
 # ------------------------------------------------------------
 #  6. Comando de inicio (servidor HTTP en primer plano)
-#     tmux está instalado pero NO se usa aquí; 
+#     tmux está instalado pero NO se usa en el CMD;
 #     puedes ejecutarlo manualmente con "docker exec -it" si lo necesitas.
 # ------------------------------------------------------------
 EXPOSE $PORT
