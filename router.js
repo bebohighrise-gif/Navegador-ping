@@ -11,6 +11,22 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const proxy = httpProxy.createProxyServer({ ws: true });
 const routeTable = {};
 
+// Asegurar que la tabla exista en la base de datos
+async function initDB(client) {
+    const createTableQuery = `
+        CREATE TABLE IF NOT EXISTS proyectos (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(100) UNIQUE NOT NULL,
+            subdominio VARCHAR(150) UNIQUE NOT NULL,
+            puerto INT NOT NULL,
+            comando VARCHAR(255) NOT NULL,
+            estado VARCHAR(20) DEFAULT 'activo',
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    `;
+    await client.query(createTableQuery);
+}
+
 async function refreshRoutes() {
     if (!DATABASE_URL) return;
     let client;
@@ -20,6 +36,10 @@ async function refreshRoutes() {
             ssl: { rejectUnauthorized: false } 
         });
         await client.connect();
+        
+        // Verificamos/creamos la tabla antes de consultar
+        await initDB(client);
+
         const res = await client.query("SELECT subdominio, puerto FROM proyectos WHERE estado = 'activo'");
         
         Object.keys(routeTable).forEach(key => delete routeTable[key]);
