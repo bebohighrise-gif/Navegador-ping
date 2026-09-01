@@ -6,6 +6,7 @@ import fcntl
 import termios
 import struct
 import logging
+import asyncio
 import websockets
 
 # Configuración básica de logging
@@ -36,6 +37,12 @@ async def pty_handler(websocket):
     loop = asyncio.get_running_loop()
     reader_registered = True
 
+    def websocket_is_open():
+        state = getattr(websocket, "state", None)
+        if state is not None:
+            return getattr(state, "name", "") == "OPEN"
+        return not getattr(websocket, "closed", True)
+
     def pty_read_callback():
         nonlocal reader_registered
         try:
@@ -44,12 +51,12 @@ async def pty_handler(websocket):
                 logger.info("PTY EOF, cerrando conexión")
                 loop.remove_reader(master)
                 reader_registered = False
-                if not websocket.closed:
+                if websocket_is_open():
                     asyncio.create_task(websocket.close())
                 return
 
             # Solo enviar si el socket sigue abierto
-            if not websocket.closed:
+            if websocket_is_open():
                 msg = json.dumps({"type": "output", "data": data.decode('utf-8', errors='ignore')})
                 asyncio.create_task(websocket.send(msg))
         except Exception as e:
@@ -57,7 +64,7 @@ async def pty_handler(websocket):
             if reader_registered:
                 loop.remove_reader(master)
                 reader_registered = False
-            if not websocket.closed:
+            if websocket_is_open():
                 asyncio.create_task(websocket.close())
 
     loop.add_reader(master, pty_read_callback)

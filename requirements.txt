@@ -1,0 +1,2 @@
+websockets>=14,<16
+psycopg2-binary>=2.9,<3

@@ -1,5 +1,5 @@
-const puppeteer = require('puppeteer');
 const fs = require('fs');
+const puppeteer = require('puppeteer-core');
 
 async function navegarYCapturar(url, outputPath = '/workspace/screenshot.png') {
     const browser = await puppeteer.launch({

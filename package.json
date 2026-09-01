@@ -9,6 +9,7 @@
   "dependencies": {
     "http-proxy": "^1.18.1",
     "pg": "^8.11.3",
+    "puppeteer-core": "^25.9.0",
     "ws": "^8.16.0"
   }
 }
