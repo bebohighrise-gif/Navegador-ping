@@ -1,7 +1,7 @@
 {
-  "name": "bebo-host-system",
+  "name": "bebo-ai-host",
   "version": "1.0.0",
-  "description": "Kernel de hosting multi-proyecto con proxy router, PTY terminal y Puppeteer",
+  "description": "Kernel Router y Proxy Engine para Bebo AI",
   "main": "router.js",
   "scripts": {
     "start": "node router.js"
@@ -9,10 +9,6 @@
   "dependencies": {
     "http-proxy": "^1.18.1",
     "pg": "^8.11.3",
-    "puppeteer": "^22.0.0",
     "ws": "^8.16.0"
-  },
-  "engines": {
-    "node": ">=20.0.0"
   }
 }
