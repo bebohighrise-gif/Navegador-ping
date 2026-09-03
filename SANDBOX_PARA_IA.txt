@@ -1,0 +1,202 @@
+================================================================================
+SANDBOX REMOTO PARA IA — Navegador-ping / Bebo AI Host
+Documento de integración (pásale este archivo a la IA)
+================================================================================
+
+Tienes acceso a un SANDBOX remoto: una shell Linux real por WebSocket.
+Cada "project" es un directorio aislado. Puedes ejecutar comandos, crear
+archivos, instalar dependencias y lanzar procesos dentro de ese proyecto.
+
+
+--------------------------------------------------------------------------------
+1. CÓMO CONECTARTE
+--------------------------------------------------------------------------------
+
+URL (producción / Render):
+  wss://<HOST_DEL_SERVICIO>/?project=<NOMBRE_PROYECTO>
+
+URL (local / Docker):
+  ws://127.0.0.1:8765/?project=<NOMBRE_PROYECTO>
+
+Autenticación (elige una):
+  • Header HTTP:  Authorization: Bearer <BEBO_SHELL_TOKEN>
+  • Query string:  &token=<BEBO_SHELL_TOKEN>
+
+Reglas del nombre de proyecto:
+  • Solo: letras, números, guión (-) y guión bajo (_)
+  • Ejemplos válidos: demo, app1, mi_proyecto, test-01
+  • NO uses rutas, puntos, espacios ni ../
+
+Si el proyecto no existe, se crea automáticamente el directorio.
+
+
+--------------------------------------------------------------------------------
+2. PROTOCOLO DE MENSAJES (JSON)
+--------------------------------------------------------------------------------
+
+Tú envías al sandbox:
+
+  Entrada de comandos / teclado:
+  {"type":"input","data":"comando aquí\n"}
+
+  Importante: casi siempre termina el "data" con \n (Enter).
+
+  Redimensionar terminal (opcional):
+  {"type":"resize","cols":120,"rows":40}
+
+El sandbox te responde:
+
+  Salida del proceso:
+  {"type":"output","data":"texto que imprimió la shell\n"}
+
+  Error:
+  {"type":"error","error":"command_timeout"}
+  {"type":"error","error":"command_too_large"}
+  {"type":"error","error":"invalid_message"}
+  {"type":"error","error":"invalid_utf8"}
+
+También puedes enviar texto plano (sin JSON); se trata como input.
+
+
+--------------------------------------------------------------------------------
+3. QUÉ PUEDE HACER EL SANDBOX
+--------------------------------------------------------------------------------
+
+Entorno Linux (bash) con herramientas instaladas:
+
+  • Shell interactiva: bash
+  • Python 3 + pip
+  • Node.js 20 + npm
+  • Git
+  • curl, herramientas básicas de sistema
+  • Cliente PostgreSQL (psql) si hay DATABASE_URL
+  • Chromium (para capturas vía browser_bot.js)
+  • tmux (sesiones en background)
+
+Capacidades típicas para una IA:
+
+  1. Ejecutar comandos de terminal
+     {"type":"input","data":"ls -la\n"}
+     {"type":"input","data":"pwd\n"}
+     {"type":"input","data":"python3 --version\n"}
+     {"type":"input","data":"node --version\n"}
+
+  2. Crear y editar archivos
+     {"type":"input","data":"cat > app.py << 'EOF'\nprint('hola')\nEOF\n"}
+     {"type":"input","data":"printf '%s\\n' 'console.log(1)' > index.js\n"}
+
+  3. Instalar dependencias
+     {"type":"input","data":"pip3 install requests --break-system-packages\n"}
+     {"type":"input","data":"npm init -y && npm install express\n"}
+
+  4. Ejecutar programas
+     {"type":"input","data":"python3 app.py\n"}
+     {"type":"input","data":"node index.js\n"}
+
+  5. Git
+     {"type":"input","data":"git init && git status\n"}
+
+  6. Lanzar un servidor en background (tmux o &)
+     {"type":"input","data":"tmux new-session -d -s app 'PORT=3001 node server.js'\n"}
+
+  7. Captura de web (script del host)
+     {"type":"input","data":"node /workspace/browser_bot.js https://example.com /tmp/shot.png\n"}
+
+El directorio de trabajo del proyecto es:
+  /workspace/proyectos/<NOMBRE_PROYECTO>
+
+(o el valor de WORKSPACE_ROOT + nombre del project)
+
+
+--------------------------------------------------------------------------------
+4. LÍMITES (respétalos)
+--------------------------------------------------------------------------------
+
+  • Máx. tamaño por mensaje de input: ~2048 bytes
+  • Máx. salida acumulada por sesión: ~500 KB (luego trunca)
+  • Timeout de comando: ~90 segundos (si un comando no termina, se mata)
+  • No hay acceso root real; el aislamiento usa bubblewrap cuando está disponible
+  • Solo puedes trabajar dentro del directorio del proyecto (sandbox)
+  • No asumas acceso a Internet bloqueado: sí hay red (curl, npm, pip, etc.)
+  • No guardes secretos en archivos del proyecto si no es necesario
+
+
+--------------------------------------------------------------------------------
+5. CÓMO DEBE USARLO LA IA (BUENAS PRÁCTICAS)
+--------------------------------------------------------------------------------
+
+1) Conéctate una vez por tarea/proyecto con el token y el project correcto.
+
+2) Envía un comando por mensaje, terminado en \n, y ESPERA la respuesta
+   "output" (y/o error) antes de mandar el siguiente, salvo que sepas que
+   es un flujo interactivo.
+
+3) Para comprobar que el shell está listo:
+   {"type":"input","data":"printf READY\\n\n"}
+   Busca "READY" en los mensajes type=output.
+
+4) Comandos largos: evita pegar bloques enormes de una vez (límite 2048 bytes).
+   Divide en varios cat/printf o usa archivos por partes.
+
+5) Si recibes "command_timeout", el proceso se terminó. Vuelve a conectar o
+   lanza de nuevo un comando corto.
+
+6) Si recibes cierre WebSocket 1008: token incorrecto o project inválido.
+
+7) Para procesos de larga duración (servidores), usa tmux o nohup & y no
+   bloquees la sesión del PTY.
+
+8) Cuando termines, no hace falta "logout"; puedes cerrar el WebSocket.
+
+
+--------------------------------------------------------------------------------
+6. EJEMPLO MÍNIMO DE SESIÓN (para la IA)
+--------------------------------------------------------------------------------
+
+Conectar:
+  wss://TU-HOST/?project=demo
+  Header: Authorization: Bearer <TOKEN>
+
+Enviar:
+  {"type":"input","data":"pwd\n"}
+Recibir (ejemplo):
+  {"type":"output","data":"/workspace/proyectos/demo\n"}
+
+Enviar:
+  {"type":"input","data":"echo hola > saludo.txt && cat saludo.txt\n"}
+Recibir:
+  {"type":"output","data":"hola\n"}
+
+Enviar:
+  {"type":"input","data":"python3 -c 'print(2+2)'\n"}
+Recibir:
+  {"type":"output","data":"4\n"}
+
+
+--------------------------------------------------------------------------------
+7. DATOS QUE DEBE TENER LA IA (CONFIG)
+--------------------------------------------------------------------------------
+
+Antes de usar el sandbox, la IA necesita (proporciónaselos tú):
+
+  SANDBOX_WS_URL   = wss://<tu-servicio.onrender.com>
+  SANDBOX_TOKEN    = valor de BEBO_SHELL_TOKEN (o el token derivado)
+  SANDBOX_PROJECT  = nombre del proyecto (ej: demo, agente1, job42)
+
+URL final de conexión:
+  {SANDBOX_WS_URL}/?project={SANDBOX_PROJECT}
+  + header Authorization: Bearer {SANDBOX_TOKEN}
+
+
+--------------------------------------------------------------------------------
+8. RESUMEN EN UNA FRASE
+--------------------------------------------------------------------------------
+
+Es una shell Linux remota por WebSocket, autenticada con Bearer token,
+aislada por proyecto, donde la IA puede escribir archivos, instalar
+paquetes y ejecutar Python/Node/bash con límites de tiempo y tamaño.
+
+
+================================================================================
+Fin del documento — listo para integrar en otra IA
+================================================================================
