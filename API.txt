@@ -1,0 +1,327 @@
+================================================================================
+  NAVEGADOR-PING / BEBO AI HOST — GUÍA DE USO DE LA API
+================================================================================
+
+Sistema de hosting con:
+  • Proxy HTTP/WebSocket por subdominio (router)
+  • Shell interactivo (PTY) por WebSocket, sandboxed
+  • Despliegue de proyectos (host_manager)
+  • Bot de navegador con Puppeteer (browser_bot)
+
+Base URL (ejemplo Render):
+  https://TU-SERVICIO.onrender.com
+
+Puerto interno PTY (si accedes directo en Docker/local):
+  ws://127.0.0.1:8765
+
+
+--------------------------------------------------------------------------------
+1. SECRETOS Y AUTENTICACIÓN
+--------------------------------------------------------------------------------
+
+Variables en Render (o entorno):
+
+  DATABASE_URL       Obligatorio. Postgres (lo pone el add-on de Render).
+  BEBO_SHELL_TOKEN   Opcional. Token del PTY. Si existe, se usa tal cual.
+  APP_SECRET         Opcional. Si no hay BEBO_SHELL_TOKEN, se deriva el token
+                     con HMAC a partir de APP_SECRET o de DATABASE_URL.
+
+Orden de prioridad del token de shell:
+  1) BEBO_SHELL_TOKEN
+  2) derivado de APP_SECRET
+  3) derivado de DATABASE_URL
+
+Cómo enviar el token al PTY:
+  • Header:   Authorization: Bearer <TOKEN>
+  • Query:    ?token=<TOKEN>
+
+
+--------------------------------------------------------------------------------
+2. API HTTP (ROUTER)
+--------------------------------------------------------------------------------
+
+El router escucha en PORT (en Render lo inyecta la plataforma, suele ser 10000+).
+
+2.1. Health check
+-----------------
+  GET /healthz
+  GET /health
+
+  Respuesta 200 JSON, ejemplo:
+  {
+    "status": "ok",
+    "routes": 3,
+    "render": true,
+    "hasDb": true
+  }
+
+  Uso típico:
+    curl https://TU-SERVICIO.onrender.com/healthz
+
+
+2.2. Proxy por subdominio / Host
+--------------------------------
+  Cualquier petición HTTP cuyo header Host coincida con un subdominio
+  registrado en la tabla "proyectos" (estado = activo) se reenvía a:
+
+    http://127.0.0.1:<puerto_del_proyecto>
+
+  Si el Host no está registrado, se muestra una página HTML de
+  "dominio no registrado".
+
+  Los WebSocket (upgrade) del mismo Host también se proxifican al
+  puerto del proyecto.
+
+
+2.3. PTY por defecto en el host principal
+-----------------------------------------
+  Si el Host está en la lista blanca (ALLOW_DEFAULT_WS_HOSTS o
+  RENDER_EXTERNAL_HOSTNAME), el upgrade WebSocket se reenvía al
+  servidor PTY interno (puerto 8765).
+
+  Así puedes abrir el shell en:
+    wss://TU-SERVICIO.onrender.com/?project=mi-proyecto
+  con el token de autenticación.
+
+
+2.4. Token interno (solo local o con Bearer)
+--------------------------------------------
+  GET /_internal/shell-token
+
+  Devuelve el token actual (explícito o derivado).
+  Solo desde 127.0.0.1 o con:
+    Authorization: Bearer <TOKEN>
+
+  Respuesta:
+    { "token": "..." }
+
+
+--------------------------------------------------------------------------------
+3. API WEBSOCKET — SHELL PTY
+--------------------------------------------------------------------------------
+
+URL de conexión (ejemplos):
+
+  wss://TU-SERVICIO.onrender.com/?project=NOMBRE_PROYECTO
+  wss://TU-SERVICIO.onrender.com/?project=NOMBRE_PROYECTO&token=TOKEN
+
+  ws://127.0.0.1:8765/?project=NOMBRE_PROYECTO
+  (con header Authorization: Bearer TOKEN)
+
+Parámetros query:
+  project   Obligatorio. Solo letras, números, guión y guión bajo.
+            Se crea el directorio bajo WORKSPACE_ROOT si no existe.
+  token     Opcional si ya envías Authorization Bearer.
+
+Cierre por error de auth o proyecto inválido:
+  código WebSocket 1008 (Unauthorized / project required or invalid)
+
+
+3.1. Mensajes que TÚ envías al servidor
+---------------------------------------
+
+A) Entrada de teclado / comando (JSON recomendado)
+
+  {
+    "type": "input",
+    "data": "ls -la\n"
+  }
+
+  - "data" es texto que se escribe en el PTY (como si teclearas).
+  - Si termina en "\n", se considera un comando y arranca el timeout.
+  - También puedes enviar texto plano (sin JSON); se trata como input.
+
+B) Redimensionar terminal
+
+  {
+    "type": "resize",
+    "cols": 120,
+    "rows": 40
+  }
+
+  cols y rows se limitan entre 1 y 500.
+
+
+3.2. Mensajes que el servidor te envía
+--------------------------------------
+
+A) Salida del shell
+
+  {
+    "type": "output",
+    "data": "archivo1.txt\narchivo2.txt\n"
+  }
+
+B) Errores
+
+  {
+    "type": "error",
+    "error": "command_too_large"
+  }
+
+  Valores posibles de "error":
+    command_too_large   — el input supera MAX_COMMAND_BYTES (default 2048)
+    command_timeout     — el comando superó COMMAND_TIMEOUT_SECONDS (default 90)
+    invalid_utf8        — bytes no válidos en UTF-8
+    invalid_message     — tipo de mensaje desconocido
+
+C) Truncado de salida
+
+  Cuando se supera MAX_OUTPUT_BYTES (default ~500 KB) puede llegar:
+
+  {
+    "type": "output",
+    "data": "\n[output truncated]\n"
+  }
+
+
+3.3. Ejemplo rápido (Python)
+
+  import asyncio, json, websockets, os
+
+  async def main():
+      token = os.environ["BEBO_SHELL_TOKEN"]  # o el derivado
+      uri = "wss://TU-SERVICIO.onrender.com/?project=demo"
+      headers = {"Authorization": f"Bearer {token}"}
+      async with websockets.connect(uri, additional_headers=headers) as ws:
+          await ws.send(json.dumps({"type": "input", "data": "pwd\n"}))
+          for _ in range(5):
+              msg = json.loads(await ws.recv())
+              print(msg)
+
+  asyncio.run(main())
+
+
+3.4. Ejemplo rápido (JavaScript / navegador)
+
+  const token = "TU_TOKEN";
+  const ws = new WebSocket(
+    `wss://TU-SERVICIO.onrender.com/?project=demo&token=${encodeURIComponent(token)}`
+  );
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: "input", data: "echo HOLA\n" }));
+    ws.send(JSON.stringify({ type: "resize", cols: 100, rows: 30 }));
+  };
+
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === "output") console.log(msg.data);
+    if (msg.type === "error") console.error(msg.error);
+  };
+
+
+--------------------------------------------------------------------------------
+4. HOST MANAGER (CLI) — Desplegar proyectos
+--------------------------------------------------------------------------------
+
+Ejecutar dentro del contenedor / máquina donde corre el host:
+
+  python3 host_manager.py deploy <nombre> <subdominio> <comando_inicio>
+  python3 host_manager.py list
+  python3 host_manager.py stop <nombre>
+
+Ejemplos:
+
+  python3 host_manager.py deploy miapi miapi.ejemplo.com "npm start"
+  python3 host_manager.py deploy webapp web.ejemplo.com "python3 -m http.server $PORT"
+  python3 host_manager.py list
+  python3 host_manager.py stop miapi
+
+Qué hace "deploy":
+  1. Elige un puerto libre (3001–8999 por defecto).
+  2. Crea /workspace/proyectos/<nombre>
+  3. Registra en Postgres (tabla proyectos).
+  4. Lanza el comando en una sesión tmux con PORT=<puerto>.
+
+El router, en menos de ~30 s, empezará a enrutar el Host/subdominio
+hacia ese puerto.
+
+
+--------------------------------------------------------------------------------
+5. BROWSER BOT (Puppeteer)
+--------------------------------------------------------------------------------
+
+  node browser_bot.js <url> [ruta_screenshot]
+
+Ejemplos:
+
+  node browser_bot.js https://example.com
+  node browser_bot.js https://example.com /workspace/proyectos/demo/shot.png
+
+Qué hace:
+  • Abre Chromium headless
+  • Navega a la URL
+  • Guarda captura PNG
+  • Imprime título y un extracto del texto de la página
+
+Variables útiles:
+  PUPPETEER_EXECUTABLE_PATH  (default /usr/bin/chromium)
+
+
+--------------------------------------------------------------------------------
+6. LÍMITES Y SEGURIDAD
+--------------------------------------------------------------------------------
+
+  • Auth obligatoria en el PTY (token).
+  • project solo permite [a-zA-Z0-9_-] (sin path traversal).
+  • Aislamiento con bubblewrap cuando está disponible.
+  • Máx. tamaño de comando: MAX_COMMAND_BYTES (2048).
+  • Máx. salida por sesión: MAX_OUTPUT_BYTES (~500 KB).
+  • Timeout de comando: COMMAND_TIMEOUT_SECONDS (90).
+  • Proxy solo hacia 127.0.0.1 en puertos registrados.
+  • El proceso del proyecto corre con cwd = directorio del proyecto.
+
+
+--------------------------------------------------------------------------------
+7. FLUJO TÍPICO DE USO
+--------------------------------------------------------------------------------
+
+  1. Desplegar el servicio en Render con DATABASE_URL
+     (y opcionalmente BEBO_SHELL_TOKEN o APP_SECRET).
+
+  2. Comprobar salud:
+       curl https://TU-SERVICIO.onrender.com/healthz
+
+  3. Abrir shell de un proyecto:
+       WebSocket a wss://...?project=demo + Bearer token
+       Enviar: {"type":"input","data":"npm init -y\n"}
+
+  4. Desplegar una app:
+       python3 host_manager.py deploy demo demo.tudominio.com "node server.js"
+
+  5. Apuntar DNS / Host del subdominio al mismo servicio Render
+     (o usar el Host que tengas registrado en la tabla proyectos).
+
+  6. La app queda accesible por HTTP/WS en ese Host.
+
+
+--------------------------------------------------------------------------------
+8. CÓDIGOS DE ERROR WEBSOCKET (resumen)
+--------------------------------------------------------------------------------
+
+  1008  Unauthorized / project inválido o ausente
+  (mensajes JSON type=error)  ver sección 3.2
+
+
+--------------------------------------------------------------------------------
+9. VARIABLES DE ENTORNO RELEVANTES
+--------------------------------------------------------------------------------
+
+  PORT                      Puerto HTTP del router (Render lo pone)
+  WS_PTY_PORT               Puerto PTY (default 8765)
+  DATABASE_URL              Postgres
+  BEBO_SHELL_TOKEN          Token PTY (opcional si hay derivación)
+  APP_SECRET                Secreto maestro opcional
+  WORKSPACE_ROOT            Default /workspace/proyectos
+  ALLOW_DEFAULT_WS_HOSTS    Hosts extra para PTY (coma-separados)
+  MAX_COMMAND_BYTES         Default 2048
+  MAX_OUTPUT_BYTES          Default 512000
+  COMMAND_TIMEOUT_SECONDS   Default 90
+  LOG_LEVEL                 info | silent
+  PUPPETEER_EXECUTABLE_PATH Path a Chromium
+
+
+================================================================================
+  Fin de la guía — Navegador-ping / Bebo AI Host
+================================================================================
