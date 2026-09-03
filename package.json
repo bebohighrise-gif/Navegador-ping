@@ -1,15 +1,24 @@
 {
   "name": "bebo-ai-host",
-  "version": "1.0.0",
-  "description": "Kernel Router y Proxy Engine para Bebo AI",
+  "version": "1.1.0",
+  "description": "Kernel Router, Proxy Engine y PTY sandboxed para Bebo AI / Navegador-ping",
   "main": "router.js",
   "scripts": {
-    "start": "node router.js"
+    "start": "node router.js",
+    "pty": "python3 server.py",
+    "test:ws": "python3 test_ws.py",
+    "test:security": "python3 test_security.py",
+    "test:proxy": "python3 test_proxy_ws.py"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "http-proxy": "^1.18.1",
     "pg": "^8.11.3",
     "puppeteer-core": "^25.9.0",
     "ws": "^8.16.0"
-  }
+  },
+  "license": "UNLICENSED",
+  "private": true
 }
