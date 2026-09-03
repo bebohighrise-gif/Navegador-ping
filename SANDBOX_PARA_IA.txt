@@ -76,127 +76,63 @@ Entorno Linux (bash) con herramientas instaladas:
 Capacidades típicas para una IA:
 
   1. Ejecutar comandos de terminal
-     {"type":"input","data":"ls -la\n"}
-     {"type":"input","data":"pwd\n"}
-     {"type":"input","data":"python3 --version\n"}
-     {"type":"input","data":"node --version\n"}
-
-  2. Crear y editar archivos
-     {"type":"input","data":"cat > app.py << 'EOF'\nprint('hola')\nEOF\n"}
-     {"type":"input","data":"printf '%s\\n' 'console.log(1)' > index.js\n"}
-
-  3. Instalar dependencias
-     {"type":"input","data":"pip3 install requests --break-system-packages\n"}
-     {"type":"input","data":"npm init -y && npm install express\n"}
-
-  4. Ejecutar programas
-     {"type":"input","data":"python3 app.py\n"}
-     {"type":"input","data":"node index.js\n"}
-
+  2. Crear y editar archivos (también bloques grandes)
+  3. Instalar dependencias (pip / npm)
+  4. Ejecutar programas Python/Node
   5. Git
-     {"type":"input","data":"git init && git status\n"}
+  6. Servidores en background con tmux
+  7. Capturas web con browser_bot.js
 
-  6. Lanzar un servidor en background (tmux o &)
-     {"type":"input","data":"tmux new-session -d -s app 'PORT=3001 node server.js'\n"}
-
-  7. Captura de web (script del host)
-     {"type":"input","data":"node /workspace/browser_bot.js https://example.com /tmp/shot.png\n"}
-
-El directorio de trabajo del proyecto es:
+Directorio de trabajo:
   /workspace/proyectos/<NOMBRE_PROYECTO>
 
-(o el valor de WORKSPACE_ROOT + nombre del project)
-
 
 --------------------------------------------------------------------------------
-4. LÍMITES (respétalos)
+4. LÍMITES
 --------------------------------------------------------------------------------
 
-  • Máx. tamaño por mensaje de input: ~2048 bytes
-  • Máx. salida acumulada por sesión: ~500 KB (luego trunca)
-  • Timeout de comando: ~90 segundos (si un comando no termina, se mata)
-  • No hay acceso root real; el aislamiento usa bubblewrap cuando está disponible
-  • Solo puedes trabajar dentro del directorio del proyecto (sandbox)
-  • No asumas acceso a Internet bloqueado: sí hay red (curl, npm, pip, etc.)
-  • No guardes secretos en archivos del proyecto si no es necesario
+  Por defecto NO hay límite de tamaño de comando ni de salida del proyecto
+  (MAX_COMMAND_BYTES=0, MAX_OUTPUT_BYTES=0). Tampoco hay timeout de comando
+  (COMMAND_TIMEOUT_SECONDS=0).
+
+  Si el operador configura esos valores > 0, entonces sí se aplican.
+
+  Siempre aplica:
+  • Aislamiento con bubblewrap cuando está disponible
+  • Trabajo dentro del directorio del proyecto
+  • Hay red (curl, npm, pip, etc.)
 
 
 --------------------------------------------------------------------------------
 5. CÓMO DEBE USARLO LA IA (BUENAS PRÁCTICAS)
 --------------------------------------------------------------------------------
 
-1) Conéctate una vez por tarea/proyecto con el token y el project correcto.
-
-2) Envía un comando por mensaje, terminado en \n, y ESPERA la respuesta
-   "output" (y/o error) antes de mandar el siguiente, salvo que sepas que
-   es un flujo interactivo.
-
-3) Para comprobar que el shell está listo:
-   {"type":"input","data":"printf READY\\n\n"}
-   Busca "READY" en los mensajes type=output.
-
-4) Comandos largos: evita pegar bloques enormes de una vez (límite 2048 bytes).
-   Divide en varios cat/printf o usa archivos por partes.
-
-5) Si recibes "command_timeout", el proceso se terminó. Vuelve a conectar o
-   lanza de nuevo un comando corto.
-
-6) Si recibes cierre WebSocket 1008: token incorrecto o project inválido.
-
-7) Para procesos de larga duración (servidores), usa tmux o nohup & y no
-   bloquees la sesión del PTY.
-
-8) Cuando termines, no hace falta "logout"; puedes cerrar el WebSocket.
+1) Conéctate con token y project correctos.
+2) Envía comandos terminados en \n y espera output.
+3) Comprueba listo con: {"type":"input","data":"printf READY\\n\n"}
+4) Puedes pegar archivos o comandos largos (sin tope por defecto).
+5) Procesos largos: usa tmux o nohup &
+6) Cierre 1008 = token o project inválido.
 
 
 --------------------------------------------------------------------------------
-6. EJEMPLO MÍNIMO DE SESIÓN (para la IA)
+6. DATOS QUE DEBE TENER LA IA
 --------------------------------------------------------------------------------
-
-Conectar:
-  wss://TU-HOST/?project=demo
-  Header: Authorization: Bearer <TOKEN>
-
-Enviar:
-  {"type":"input","data":"pwd\n"}
-Recibir (ejemplo):
-  {"type":"output","data":"/workspace/proyectos/demo\n"}
-
-Enviar:
-  {"type":"input","data":"echo hola > saludo.txt && cat saludo.txt\n"}
-Recibir:
-  {"type":"output","data":"hola\n"}
-
-Enviar:
-  {"type":"input","data":"python3 -c 'print(2+2)'\n"}
-Recibir:
-  {"type":"output","data":"4\n"}
-
-
---------------------------------------------------------------------------------
-7. DATOS QUE DEBE TENER LA IA (CONFIG)
---------------------------------------------------------------------------------
-
-Antes de usar el sandbox, la IA necesita (proporciónaselos tú):
 
   SANDBOX_WS_URL   = wss://<tu-servicio.onrender.com>
-  SANDBOX_TOKEN    = valor de BEBO_SHELL_TOKEN (o el token derivado)
-  SANDBOX_PROJECT  = nombre del proyecto (ej: demo, agente1, job42)
+  SANDBOX_TOKEN    = valor de BEBO_SHELL_TOKEN
+  SANDBOX_PROJECT  = nombre del proyecto
 
-URL final de conexión:
+URL:
   {SANDBOX_WS_URL}/?project={SANDBOX_PROJECT}
-  + header Authorization: Bearer {SANDBOX_TOKEN}
+  Header: Authorization: Bearer {SANDBOX_TOKEN}
 
 
 --------------------------------------------------------------------------------
-8. RESUMEN EN UNA FRASE
+7. RESUMEN
 --------------------------------------------------------------------------------
 
-Es una shell Linux remota por WebSocket, autenticada con Bearer token,
-aislada por proyecto, donde la IA puede escribir archivos, instalar
-paquetes y ejecutar Python/Node/bash con límites de tiempo y tamaño.
+Shell Linux remota por WebSocket, autenticada, aislada por proyecto,
+sin límites de tamaño por defecto, con Python/Node/bash/git/npm/pip.
 
-
-================================================================================
-Fin del documento — listo para integrar en otra IA
 ================================================================================
