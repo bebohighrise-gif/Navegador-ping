@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     tmux \
+    bubblewrap \
     python3 \
     python3-pip \
     python3-venv \
@@ -29,7 +30,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar dependencias requeridas para scripts de Python
-RUN pip3 install --break-system-packages websockets psycopg2-binary
+COPY requirements.txt /tmp/requirements.txt
+RUN pip3 install --break-system-packages -r /tmp/requirements.txt
 
 WORKDIR /workspace
 
