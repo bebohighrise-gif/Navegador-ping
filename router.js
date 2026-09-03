@@ -11,8 +11,10 @@ const { Pool } = require('pg');
 const PORT = process.env.PORT || 8080;
 const DATABASE_URL = process.env.DATABASE_URL;
 const DEFAULT_WS_PORT = parseInt(process.env.DEFAULT_WS_PORT || '8765', 10);
-const ALLOW_DEFAULT_WS_HOSTS = (process.env.ALLOW_DEFAULT_WS_HOSTS || '')
-    .split(',')
+const ALLOW_DEFAULT_WS_HOSTS = [
+    ...(process.env.ALLOW_DEFAULT_WS_HOSTS || '').split(','),
+    process.env.RENDER_EXTERNAL_HOSTNAME || '',
+]
     .map(h => h.trim().toLowerCase())
     .filter(Boolean);
 
