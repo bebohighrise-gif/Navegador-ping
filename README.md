@@ -1,88 +1,96 @@
-# Navegador-ping / Bebo AI Host
+# Navegador-ping · Bebo AI Host
 
-Kernel de hosting ligero para proyectos web con:
+Kernel de hosting profesional: proxy inverso por subdominio, PTY sandboxed y despliegue de proyectos.
 
-- **Router HTTP/WebSocket** (`router.js`) – proxy inverso por subdominio basado en PostgreSQL
-- **Servidor PTY sandboxed** (`server.py`) – shell interactivo por WebSocket con autenticación por token y aislamiento con bubblewrap
-- **Host Manager** (`host_manager.py`) – despliega proyectos, asigna puertos libres y lanza procesos en tmux
-- **Browser bot** (`browser_bot.js`) – captura de pantallas y extracción de texto con Puppeteer/Chromium
+## En Render: **solo 1 secreto obligatorio**
 
-## Requisitos
+| Variable | ¿Obligatoria? | Notas |
+|----------|---------------|--------|
+| `DATABASE_URL` | **Sí** | La genera el add-on Postgres de Render |
+| `APP_SECRET` | Opcional | Si la pones, el token de shell se deriva de ella (más limpio) |
+| `BEBO_SHELL_TOKEN` | Opcional | Override explícito del token |
 
-- Docker (recomendado) o:
-  - Node.js ≥ 18
-  - Python ≥ 3.10
-  - PostgreSQL
-  - Chromium / Chrome
-  - tmux + bubblewrap (opcional pero recomendado)
+**No necesitas configurar `BEBO_SHELL_TOKEN`.**  
+Si solo existe `DATABASE_URL`, el sistema deriva automáticamente un token estable con HMAC.  
+Si defines `APP_SECRET`, se usa esa como fuente (recomendado a medio plazo).
 
-## Variables de entorno importantes
+Render rellena solo:
+- `RENDER_EXTERNAL_HOSTNAME` → se añade automáticamente a los hosts permitidos del PTY.
 
-| Variable | Descripción | Default |
-|----------|-------------|---------| 
-| `PORT` | Puerto del router HTTP | `8080` |
-| `WS_PTY_PORT` | Puerto del servidor PTY | `8765` |
-| `DATABASE_URL` | Cadena de conexión a Postgres | – |
-| `BEBO_SHELL_TOKEN` | Token Bearer para el PTY (obligatorio) | – |
-| `WORKSPACE_ROOT` | Raíz de los proyectos | `/workspace/proyectos` |
-| `ALLOW_DEFAULT_WS_HOSTS` | Hosts que pueden usar el PTY por defecto (coma-separados) | – |
-| `PUPPETEER_EXECUTABLE_PATH` | Ruta a Chromium | `/usr/bin/chromium` |
-| `MAX_COMMAND_BYTES` | Límite de bytes por comando PTY | `2048` |
-| `MAX_OUTPUT_BYTES` | Límite de salida por sesión | `512000` |
-| `COMMAND_TIMEOUT_SECONDS` | Timeout de comando | `90` |
+### Deploy en Render
 
-## Arranque con Docker
+1. Crea un **Web Service** desde este repo.
+2. Añade el add-on **PostgreSQL** (inyecta `DATABASE_URL`).
+3. (Opcional) Añade `APP_SECRET` con un valor largo aleatorio.
+4. Dockerfile ya está listo. El puerto es el que Render inyecta (`PORT`).
+
+```bash
+# Comprobar salud
+curl https://tu-servicio.onrender.com/healthz
+```
+
+## Componentes
+
+| Archivo | Rol |
+|---------|-----|
+| `router.js` | Proxy HTTP/WS + rutas desde Postgres |
+| `server.py` | PTY WebSocket sandboxed (bubblewrap) |
+| `host_manager.py` | `deploy` / `list` / `stop` de proyectos |
+| `browser_bot.js` | Capturas con Puppeteer |
+| `secret_utils.py` | Derivación de token (menos secretos) |
+| `docker-entrypoint.sh` | Arranque limpio de ambos procesos |
+
+## Variables de entorno (completas)
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `PORT` | `8080` | Router HTTP |
+| `WS_PTY_PORT` | `8765` | Servidor PTY |
+| `DATABASE_URL` | – | Postgres |
+| `APP_SECRET` | – | Secreto maestro (opcional) |
+| `BEBO_SHELL_TOKEN` | derivado | Token PTY |
+| `WORKSPACE_ROOT` | `/workspace/proyectos` | Raíz de proyectos |
+| `ALLOW_DEFAULT_WS_HOSTS` | auto | Hosts extra para PTY |
+| `MAX_COMMAND_BYTES` | `2048` | Límite comando |
+| `MAX_OUTPUT_BYTES` | `512000` | Límite salida |
+| `COMMAND_TIMEOUT_SECONDS` | `90` | Timeout |
+| `LOG_LEVEL` | `info` | `info` / `silent` |
+
+## Uso local / Docker
 
 ```bash
 docker build -t navegador-ping .
 docker run --rm -p 8080:8080 -p 8765:8765 \
   -e DATABASE_URL="postgres://..." \
-  -e BEBO_SHELL_TOKEN="tu-token-secreto" \
-  -e ALLOW_DEFAULT_WS_HOSTS="tu-dominio.com" \
+  -e APP_SECRET="cambia-esto-por-uno-largo" \
   navegador-ping
 ```
 
-## Uso del Host Manager
+### Host Manager
 
 ```bash
-# Desplegar un proyecto
 python3 host_manager.py deploy mi-app mi-app.ejemplo.com "npm start"
-
-# Listar
 python3 host_manager.py list
-
-# Detener
 python3 host_manager.py stop mi-app
 ```
 
-## Tests
+### Tests
 
 ```bash
-export BEBO_SHELL_TOKEN=...
+export BEBO_SHELL_TOKEN=...   # o deja que se derive
 python3 test_ws.py
 python3 test_security.py
-# (con el router levantado en el puerto de prueba)
-ROUTER_TEST_PORT=18088 python3 test_proxy_ws.py
 ```
-
-## Mejoras incluidas en esta versión
-
-- Arranque correcto de ambos procesos con manejo de señales (entrypoint)
-- Esquema de BD unificado entre `router.js` y `host_manager.py` (incluye `updated_at` + trigger)
-- Validación estricta de nombres de proyecto y subdominio
-- Comparación de token en tiempo constante aproximado
-- Healthcheck HTTP (`/healthz`)
-- SSL de Postgres configurable y más seguro por defecto
-- Chromium correcto en Ubuntu 24.04
-- Browser bot con mejor manejo de errores y timeouts
-- Página de “host no registrado” más limpia
-- `.gitignore` y `package.json` actualizados
 
 ## Seguridad
 
-- El PTY **exige** `BEBO_SHELL_TOKEN`.
-- Los nombres de proyecto solo permiten caracteres alfanuméricos + `-_`.
-- Se usa bubblewrap cuando está disponible.
-- Límites de tamaño de comando y de salida.
-- Timeout de comandos.
-- Proxy solo a `127.0.0.1` en los puertos registrados.
+- Token de shell obligatorio (explícito o derivado).
+- Nombres de proyecto solo `[a-zA-Z0-9_-]`.
+- bubblewrap cuando está disponible.
+- Límites de tamaño y timeout de comandos.
+- Proxy solo a `127.0.0.1` en puertos registrados.
+- Healthcheck en `/healthz`.
+
+## Licencia
+
+Privado / UNLICENSED.

@@ -1,7 +1,7 @@
 {
   "name": "bebo-ai-host",
-  "version": "1.1.0",
-  "description": "Kernel Router, Proxy Engine y PTY sandboxed para Bebo AI / Navegador-ping",
+  "version": "1.2.0",
+  "description": "Bebo AI Host — router + PTY sandboxed (Render-ready, minimal secrets)",
   "main": "router.js",
   "scripts": {
     "start": "node router.js",
