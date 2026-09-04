@@ -55,6 +55,14 @@ async function initDB() {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        // Migración: si la tabla ya existía de una versión anterior del
+        // esquema, CREATE TABLE IF NOT EXISTS no le agrega columnas nuevas.
+        // Estas sentencias son idempotentes y no rompen nada si ya existen.
+        await client.query(`
+            ALTER TABLE proyectos
+            ADD COLUMN IF NOT EXISTS creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        `);
         await client.query(`
             CREATE INDEX IF NOT EXISTS idx_proyectos_subdominio_estado 
             ON proyectos(subdominio, estado);
