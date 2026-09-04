@@ -34,7 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && ln -sf /usr/bin/chromium /usr/bin/chromium-browser || true
+    && (ln -sf /usr/bin/chromium /usr/bin/chromium-browser || true) \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
