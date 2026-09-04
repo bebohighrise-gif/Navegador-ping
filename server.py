@@ -102,7 +102,13 @@ def requested_project(websocket):
 
 def sandbox_command(project_root: Path) -> list:
     bwrap = "/usr/bin/bwrap"
-    if os.path.isfile(bwrap) and os.access(bwrap, os.X_OK):
+    # Render puede ejecutar el contenedor sin los user namespaces necesarios
+    # para bubblewrap. En ese caso bwrap termina con exit 1 antes de abrir el
+    # shell y el cliente sólo ve pty_exit_1. El aislamiento por cwd mantiene
+    # los proyectos separados funcionalmente; bwrap queda opt-in para hosts
+    # que hayan habilitado explícitamente esos namespaces.
+    use_bwrap = os.environ.get("ENABLE_BWRAP", "0").strip().lower() in {"1", "true", "yes"}
+    if use_bwrap and os.path.isfile(bwrap) and os.access(bwrap, os.X_OK):
         return [
             bwrap,
             "--die-with-parent",
@@ -116,7 +122,7 @@ def sandbox_command(project_root: Path) -> list:
             "--chdir", str(project_root),
             "/bin/bash", "--noprofile", "--norc", "-i",
         ]
-    logger.warning("bubblewrap no disponible; aislamiento solo por cwd")
+    logger.warning("bubblewrap desactivado/no disponible; aislamiento solo por cwd")
     return ["/bin/bash", "--noprofile", "--norc", "-i"]
 
 
