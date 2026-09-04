@@ -3,8 +3,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     NODE_ENV=production \
-    PYTHONUNBUFFERED=1 \
-    PATH=/opt/venv/bin:$PATH
+    PYTHONUNBUFFERED=1
 
 # Dependencias de sistema + Chromium + Node 20 + herramientas
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,9 +38,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Python deps
 COPY requirements.txt /tmp/requirements.txt
-RUN /usr/bin/python3 -m venv /opt/venv \
-    && /opt/venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt \
-    && rm -f /tmp/requirements.txt \
+RUN curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
+    && /usr/bin/python3 /tmp/get-pip.py --break-system-packages \
+    && /usr/local/bin/python3 -m pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm -f /tmp/get-pip.py /tmp/requirements.txt \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
