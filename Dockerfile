@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux \
     bubblewrap \
     python3 \
-    python3-pip \
-    python3-venv \
+    python3-websockets \
+    python3-psycopg2 \
     postgresql-client \
     chromium \
     chromium-sandbox \
@@ -35,14 +35,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && ln -sf /usr/bin/chromium /usr/bin/chromium-browser || true
-
-# Python deps
-COPY requirements.txt /tmp/requirements.txt
-RUN curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
-    && /usr/bin/python3 /tmp/get-pip.py --break-system-packages \
-    && /usr/local/bin/python3 -m pip install --no-cache-dir -r /tmp/requirements.txt \
-    && rm -f /tmp/get-pip.py /tmp/requirements.txt \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
