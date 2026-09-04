@@ -3,7 +3,8 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     NODE_ENV=production \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PATH=/opt/venv/bin:$PATH
 
 # Dependencias de sistema + Chromium + Node 20 + herramientas
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,13 +35,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/chromium /usr/bin/chromium-browser || true
 
 # Python deps
 COPY requirements.txt /tmp/requirements.txt
-RUN python3 -m pip install --break-system-packages --no-cache-dir -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+RUN /usr/bin/python3 -m venv /opt/venv \
+    && /opt/venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm -f /tmp/requirements.txt \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
