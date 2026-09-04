@@ -246,6 +246,16 @@ async def pty_handler(websocket):
         reader_registered = True
         logger.info("PTY iniciado para proyecto %s (PID %s)", project_root.name, proc.pid)
 
+        async def monitor_process():
+            return_code = await proc.wait()
+            if websocket_is_open():
+                try:
+                    await websocket.send(json.dumps({"type": "error", "error": f"pty_exit_{return_code}"}))
+                except Exception:
+                    pass
+
+        asyncio.create_task(monitor_process())
+
         async for message in websocket:
             if isinstance(message, bytes):
                 if MAX_COMMAND_BYTES > 0 and len(message) > MAX_COMMAND_BYTES:

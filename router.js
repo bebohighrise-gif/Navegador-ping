@@ -141,8 +141,8 @@ async function refreshRoutes() {
 // ============================================================
 const proxy = httpProxy.createProxyServer({
     ws: true,
-    timeout: 10000,          // tiempo de espera para conectar al destino
-    proxyTimeout: 10000,
+    timeout: 60000,          // Render puede despertar el servicio/proceso PTY
+    proxyTimeout: 60000,
     xfwd: true,              // pasa headers originales (X-Forwarded-*)
 });
 
