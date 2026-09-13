@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Herramienta de persistencia para el escritorio efímero.
-Todo se guarda en PostgreSQL (DATABASE_URL) para no perder nada.
+Herramienta de persistencia — guarda/recupera en PostgreSQL.
+El autosave ya guarda solo; esto es para uso manual extra.
 """
 
 import os
@@ -13,14 +13,15 @@ try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
-    print("ERROR: psycopg2 no está instalado. Ejecuta: pip3 install psycopg2-binary")
+    print("ERROR: psycopg2 no disponible")
     sys.exit(1)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
-    print("ERROR: No existe la variable DATABASE_URL.")
-    print("Asegúrate de tener el add-on PostgreSQL de Render conectado.")
+    print("ERROR: No existe DATABASE_URL")
     sys.exit(1)
+
+HOME = Path(os.environ.get("HOME", "/home/desktop"))
 
 def get_conn():
     return psycopg2.connect(DATABASE_URL)
@@ -39,6 +40,7 @@ def init_db():
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS installed_packages (
                     name TEXT PRIMARY KEY,
+                    manager TEXT DEFAULT 'apk',
                     added_at TIMESTAMPTZ DEFAULT NOW()
                 );
             """)
@@ -50,18 +52,24 @@ def init_db():
                 );
             """)
         conn.commit()
-    print("✓ Tablas creadas / verificadas en PostgreSQL")
+    print("✓ Tablas listas en PostgreSQL")
 
 def save_file(local_path, remote_path=None):
-    local = Path(local_path).expanduser().resolve()
+    local = Path(local_path).expanduser()
+    if not local.is_absolute():
+        local = (Path.cwd() / local).resolve()
     if not local.exists():
-        print(f"ERROR: No existe el archivo {local}")
+        print(f"ERROR: No existe {local}")
         sys.exit(1)
 
-    remote = remote_path or str(local)
-    data = local.read_bytes()
+    # Ruta en BD relativa a home si es posible
+    try:
+        rel = local.relative_to(HOME)
+        remote = remote_path or f"home/{rel}"
+    except ValueError:
+        remote = remote_path or str(local)
 
-    # Detectar si es binario
+    data = local.read_bytes()
     is_binary = b"\x00" in data[:1024]
     if is_binary:
         content = base64.b64encode(data).decode("ascii")
@@ -83,23 +91,28 @@ def save_file(local_path, remote_path=None):
                     updated_at = NOW()
             """, (remote, content, is_binary))
         conn.commit()
-    print(f"✓ Guardado en BD: {remote}")
+    print(f"✓ Guardado: {remote}")
 
 def load_file(remote_path, local_path=None):
-    local = Path(local_path or remote_path).expanduser()
     with get_conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT content, is_binary FROM virtual_files WHERE path = %s", (remote_path,))
             row = cur.fetchone()
 
     if not row:
-        print(f"ERROR: No existe en la BD: {remote_path}")
+        print(f"ERROR: No existe en BD: {remote_path}")
         sys.exit(1)
+
+    if local_path:
+        local = Path(local_path).expanduser()
+    elif remote_path.startswith("home/"):
+        local = HOME / remote_path[5:]
+    else:
+        local = Path(remote_path).expanduser()
 
     local.parent.mkdir(parents=True, exist_ok=True)
     if row["is_binary"]:
-        data = base64.b64decode(row["content"])
-        local.write_bytes(data)
+        local.write_bytes(base64.b64decode(row["content"]))
     else:
         local.write_text(row["content"], encoding="utf-8")
     print(f"✓ Recuperado: {remote_path} → {local}")
@@ -110,123 +123,121 @@ def list_files():
             cur.execute("SELECT path, is_binary, updated_at FROM virtual_files ORDER BY path")
             rows = cur.fetchall()
     if not rows:
-        print("(no hay archivos guardados)")
+        print("(vacío)")
         return
-    print(f"{'Ruta':<50} {'Tipo':<10} Actualizado")
-    print("-" * 80)
     for r in rows:
-        tipo = "binario" if r["is_binary"] else "texto"
-        print(f"{r['path']:<50} {tipo:<10} {r['updated_at']}")
+        tipo = "bin" if r["is_binary"] else "txt"
+        print(f"  [{tipo}] {r['path']}")
 
-def pkg_add(name):
+def pkg_add(name, manager="apk"):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO installed_packages (name) VALUES (%s)
-                ON CONFLICT (name) DO NOTHING
-            """, (name,))
+                INSERT INTO installed_packages (name, manager) VALUES (%s, %s)
+                ON CONFLICT (name) DO UPDATE SET manager = EXCLUDED.manager
+            """, (name, manager))
         conn.commit()
-    print(f"✓ Paquete marcado para reinstalar: {name}")
-    print("  (ejecuta 'db restore' después de reiniciar para instalarlo)")
+    print(f"✓ Marcado para reinstalar: {name} ({manager})")
 
 def pkg_list():
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT name FROM installed_packages ORDER BY name")
+            cur.execute("SELECT name, manager FROM installed_packages ORDER BY name")
             rows = cur.fetchall()
     if not rows:
-        print("(ningún paquete marcado)")
+        print("(ninguno)")
         return
-    for (name,) in rows:
-        print(f"  - {name}")
+    for name, manager in rows:
+        print(f"  - {name} [{manager}]")
 
 def restore():
     print("→ Restaurando desde PostgreSQL...")
-    # 1. Paquetes
+
+    # Paquetes
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT name FROM installed_packages")
-            packages = [r[0] for r in cur.fetchall()]
+            cur.execute("SELECT name, manager FROM installed_packages")
+            packages = cur.fetchall()
 
-    if packages:
-        print(f"  Instalando paquetes: {', '.join(packages)}")
-        os.system(f"sudo apk add --no-cache {' '.join(packages)}")
-    else:
-        print("  (ningún paquete para instalar)")
+    for name, manager in packages:
+        try:
+            if manager == "apk":
+                os.system(f"sudo apk add --no-cache {name} 2>/dev/null")
+            elif manager == "pip":
+                os.system(f"pip3 install --user {name} 2>/dev/null")
+            elif manager == "npm":
+                os.system(f"npm install -g {name} 2>/dev/null")
+            print(f"  ✓ paquete {name}")
+        except Exception:
+            print(f"  ✗ paquete {name}")
 
-    # 2. Archivos
+    # Archivos
     with get_conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT path, content, is_binary FROM virtual_files")
             files = cur.fetchall()
 
     for f in files:
-        local = Path(f["path"]).expanduser()
         try:
+            p = f["path"]
+            if p.startswith("home/"):
+                local = HOME / p[5:]
+            else:
+                local = Path(p).expanduser()
             local.parent.mkdir(parents=True, exist_ok=True)
             if f["is_binary"]:
                 local.write_bytes(base64.b64decode(f["content"]))
             else:
                 local.write_text(f["content"], encoding="utf-8")
-            print(f"  ✓ {f['path']}")
+            print(f"  ✓ {p}")
         except Exception as e:
             print(f"  ✗ {f['path']}: {e}")
 
     print("✓ Restauración terminada")
 
 def usage():
-    print("""Uso: db <comando> [argumentos]
+    print("""db — persistencia en PostgreSQL (también hay autosave automático)
 
-Comandos:
-  init                     Crea las tablas en PostgreSQL (hazlo una vez)
-  save <archivo> [ruta]    Guarda un archivo en la base de datos
-  load <ruta> [archivo]    Recupera un archivo de la base de datos
-  list                     Lista todos los archivos guardados
-  pkg add <paquete>        Marca un paquete apk para reinstalar
-  pkg list                 Lista paquetes marcados
-  restore                  Reinstala paquetes + recupera todos los archivos
-
-Ejemplos:
   db init
-  db save ~/miscript.py
-  db save /etc/mi-config.conf configs/mi-config.conf
-  db load configs/mi-config.conf
-  db pkg add htop
+  db save <archivo>
+  db load <ruta_en_bd>
+  db list
+  db pkg add <paquete> [apk|pip|npm]
+  db pkg list
   db restore
 """)
 
 def main():
     if len(sys.argv) < 2:
         usage()
-        sys.exit(0)
-
+        return
     cmd = sys.argv[1]
-
     if cmd == "init":
         init_db()
     elif cmd == "save":
         if len(sys.argv) < 3:
-            print("Uso: db save <archivo> [ruta_en_bd]")
+            print("Uso: db save <archivo>")
             sys.exit(1)
         save_file(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
     elif cmd == "load":
         if len(sys.argv) < 3:
-            print("Uso: db load <ruta_en_bd> [archivo_local]")
+            print("Uso: db load <ruta>")
             sys.exit(1)
         load_file(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
     elif cmd == "list":
         list_files()
     elif cmd == "pkg":
         if len(sys.argv) < 3:
-            print("Uso: db pkg add|list [paquete]")
+            print("Uso: db pkg add|list ...")
             sys.exit(1)
         sub = sys.argv[2]
         if sub == "add" and len(sys.argv) >= 4:
-            pkg_add(sys.argv[3])
+            mgr = sys.argv[4] if len(sys.argv) > 4 else "apk"
+            pkg_add(sys.argv[3], mgr)
         elif sub == "list":
             pkg_list()
         else:
-            print("Uso: db pkg add <paquete>  |  db pkg list")
+            print("Uso: db pkg add <nombre> [apk|pip|npm]")
     elif cmd == "restore":
         restore()
     else:

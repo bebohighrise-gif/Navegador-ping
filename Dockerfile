@@ -4,17 +4,41 @@ RUN apk add --no-cache \
     bash \
     python3 \
     py3-pip \
-    postgresql-client \
     py3-psycopg2 \
+    postgresql-client \
     curl \
+    wget \
     nano \
+    vim \
     git \
     sudo \
     make \
     g++ \
+    gcc \
+    musl-dev \
     python3-dev \
+    libffi-dev \
+    openssl-dev \
+    cargo \
+    rust \
+    openjdk17-jre \
+    php \
+    php-cli \
+    ruby \
+    go \
+    unzip \
+    tar \
+    zip \
+    htop \
+    coreutils \
+    findutils \
+    grep \
+    sed \
+    gawk \
     && adduser -D -s /bin/bash desktop \
-    && echo "desktop ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    && echo "desktop ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p /home/desktop/workspace /home/desktop/.local/bin \
+    && chown -R desktop:desktop /home/desktop
 
 WORKDIR /app
 
@@ -23,15 +47,20 @@ RUN npm install --omit=dev
 
 COPY server.js ./
 COPY public/ ./public/
+COPY entrypoint.sh /entrypoint.sh
+COPY db_tools/ /usr/local/bin/
 
-# Script de persistencia
-COPY db_tools/db /usr/local/bin/db
-RUN chmod +x /usr/local/bin/db
+RUN chmod +x /entrypoint.sh /usr/local/bin/db /usr/local/bin/autosave \
+    && ln -sf /usr/local/bin/db /usr/local/bin/db-save 2>/dev/null || true
 
 USER desktop
 WORKDIR /home/desktop
 
-ENV PORT=8080
+ENV PORT=8080 \
+    HOME=/home/desktop \
+    PATH="/home/desktop/.local/bin:/usr/local/bin:$PATH" \
+    AUTOSAVE_INTERVAL=120
+
 EXPOSE 8080
 
-CMD ["node", "/app/server.js"]
+ENTRYPOINT ["/entrypoint.sh"]

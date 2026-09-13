@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""
+Autosave: guarda automáticamente el home del usuario en PostgreSQL.
+Se ejecuta en segundo plano y sincroniza cada AUTOSAVE_INTERVAL segundos.
+"""
+
+import os
+import sys
+import time
+import hashlib
+import base64
+from pathlib import Path
+
+try:
+    import psycopg2
+except ImportError:
+    sys.exit(0)
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    sys.exit(0)
+
+INTERVAL = int(os.environ.get("AUTOSAVE_INTERVAL", "120"))
+HOME = Path(os.environ.get("HOME", "/home/desktop"))
+
+# Carpetas/archivos a sincronizar (relativos a HOME)
+WATCH = [
+    "workspace",
+    ".bashrc",
+    ".profile",
+    ".gitconfig",
+    ".npmrc",
+    ".local",
+]
+
+# Extensiones / nombres que nunca se guardan
+SKIP_NAMES = {
+    "node_modules", ".git", "__pycache__", ".cache",
+    ".npm", ".cargo", "target", ".venv", "venv",
+}
+SKIP_SUFFIX = {".pyc", ".pyo", ".o", ".so", ".class"}
+
+# Tamaño máximo por archivo (2 MB)
+MAX_BYTES = 2 * 1024 * 1024
+
+last_hashes = {}
+
+def get_conn():
+    return psycopg2.connect(DATABASE_URL)
+
+def should_skip(path: Path) -> bool:
+    for part in path.parts:
+        if part in SKIP_NAMES:
+            return True
+    if path.suffix in SKIP_SUFFIX:
+        return True
+    try:
+        if path.is_file() and path.stat().st_size > MAX_BYTES:
+            return True
+    except OSError:
+        return True
+    return False
+
+def file_hash(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def save_file(path: Path, rel: str):
+    data = path.read_bytes()
+    is_binary = b"\x00" in data[:1024]
+    if is_binary:
+        content = base64.b64encode(data).decode("ascii")
+    else:
+        try:
+            content = data.decode("utf-8")
+        except UnicodeDecodeError:
+            content = base64.b64encode(data).decode("ascii")
+            is_binary = True
+
+    # Guardamos con ruta relativa al home para portabilidad
+    db_path = f"home/{rel}"
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO virtual_files (path, content, is_binary, updated_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (path) DO UPDATE
+                SET content = EXCLUDED.content,
+                    is_binary = EXCLUDED.is_binary,
+                    updated_at = NOW()
+            """, (db_path, content, is_binary))
+        conn.commit()
+
+def collect_files():
+    files = []
+    for item in WATCH:
+        p = HOME / item
+        if not p.exists():
+            continue
+        if p.is_file():
+            if not should_skip(p):
+                files.append((p, item))
+        elif p.is_dir():
+            for root, dirs, names in os.walk(p):
+                # filtrar dirs in-place
+                dirs[:] = [d for d in dirs if d not in SKIP_NAMES]
+                for name in names:
+                    fp = Path(root) / name
+                    if should_skip(fp):
+                        continue
+                    rel = str(fp.relative_to(HOME))
+                    files.append((fp, rel))
+    return files
+
+def sync_once():
+    global last_hashes
+    changed = 0
+    for path, rel in collect_files():
+        try:
+            h = file_hash(path)
+            if last_hashes.get(rel) == h:
+                continue
+            save_file(path, rel)
+            last_hashes[rel] = h
+            changed += 1
+        except Exception:
+            pass
+    return changed
+
+def main():
+    # Esperar un poco al arranque
+    time.sleep(15)
+    while True:
+        try:
+            n = sync_once()
+            if n:
+                print(f"[autosave] {n} archivo(s) guardados en PostgreSQL", flush=True)
+        except Exception as e:
+            print(f"[autosave] error: {e}", flush=True)
+        time.sleep(INTERVAL)
+
+if __name__ == "__main__":
+    main()

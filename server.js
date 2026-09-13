@@ -18,9 +18,9 @@ app.get("/healthz", (_req, res) => {
 const wss = new WebSocketServer({ server, path: "/ws" });
 
 wss.on("connection", (ws) => {
-  const shell = os.platform() === "win32" ? "powershell.exe" : "bash";
+  const shell = "bash";
 
-  const term = pty.spawn(shell, [], {
+  const term = pty.spawn(shell, ["-l"], {
     name: "xterm-256color",
     cols: 100,
     rows: 30,
@@ -29,14 +29,14 @@ wss.on("connection", (ws) => {
       ...process.env,
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
-      PS1: "\\[\\e[1;32m\\]desktop@beboai\\[\\e[0m\\]:\\[\\e[1;34m\\]\\w\\[\\e[0m\\]$ ",
+      HOME: process.env.HOME || "/home/desktop",
+      USER: "desktop",
+      PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
     },
   });
 
   term.onData((data) => {
-    try {
-      ws.send(data);
-    } catch (_) {}
+    try { ws.send(data); } catch (_) {}
   });
 
   ws.on("message", (msg) => {
@@ -53,23 +53,27 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    try {
-      term.kill();
-    } catch (_) {}
+    try { term.kill(); } catch (_) {}
   });
 
-  // Banner de bienvenida
   setTimeout(() => {
     term.write("\r\n");
-    term.write("\x1b[1;36m╔══════════════════════════════════════════════╗\x1b[0m\r\n");
-    term.write("\x1b[1;36m║         Bebo AI · Consola Linux              ║\x1b[0m\r\n");
-    term.write("\x1b[1;36m╚══════════════════════════════════════════════╝\x1b[0m\r\n");
+    term.write("\x1b[1;36m╔══════════════════════════════════════════════════╗\x1b[0m\r\n");
+    term.write("\x1b[1;36m║         Bebo AI · Consola Linux                  ║\x1b[0m\r\n");
+    term.write("\x1b[1;36m╚══════════════════════════════════════════════════╝\x1b[0m\r\n");
     term.write("\r\n");
-    term.write("Escribe \x1b[1;33mdb\x1b[0m para ver comandos de persistencia.\r\n");
-    term.write("Todo lo importante guárdalo con: \x1b[1;32mdb save archivo\x1b[0m\r\n\r\n");
-  }, 200);
+    term.write("\x1b[1;32m✓\x1b[0m Autosave activo → todo se guarda solo en PostgreSQL\r\n");
+    term.write("\x1b[1;32m✓\x1b[0m Al arrancar se restaura automáticamente\r\n");
+    term.write("\r\n");
+    term.write("Lenguajes listos: \x1b[1;33mpython3 node php ruby go java\x1b[0m\r\n");
+    term.write("Instalar paquetes: \x1b[1;33msudo apk add <paquete>\x1b[0m\r\n");
+    term.write("Pip: \x1b[1;33mpip3 install --user <paquete>\x1b[0m\r\n");
+    term.write("Npm: \x1b[1;33mnpm install -g <paquete>\x1b[0m\r\n");
+    term.write("\r\n");
+    term.write("Trabaja en: \x1b[1;34m~/workspace\x1b[0m  (se guarda solo)\r\n\r\n");
+  }, 300);
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Consola lista en puerto ${PORT}`);
+  console.log(`[bebo] Consola lista en puerto ${PORT}`);
 });
