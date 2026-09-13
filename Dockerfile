@@ -45,18 +45,13 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
 
-# Payload + assemble (archivos grandes en base64 parts)
-COPY _payload/ ./_payload/
-COPY scripts/assemble.py ./scripts/assemble.py
-RUN python3 scripts/assemble.py
-
-COPY workspace_api.js ./
+COPY server.js workspace_api.js ./
+COPY public/ ./public/
 COPY entrypoint.sh /entrypoint.sh
 COPY db_tools/ /usr/local/bin/
 
 RUN chmod +x /entrypoint.sh /usr/local/bin/db /usr/local/bin/autosave \
-    && chown -R desktop:desktop /app \
-    && rm -rf _payload scripts
+    && chown -R desktop:desktop /app
 
 USER desktop
 WORKDIR /home/desktop

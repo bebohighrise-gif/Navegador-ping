@@ -3,15 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="theme-color" content="#0a0d11" />
+  <meta name="theme-color" content="#030605" />
   <title>Bebo AI · Consola</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="shell">
+  <!-- SPLASH BEBO HACKING -->
+  <div class="splash" id="splash">
+    <div class="splash-row">
+      <pre class="splash-mask" id="splashMask"></pre>
+      <div class="splash-text">
+        <div class="splash-title">BEBO</div>
+        <div class="splash-sub">HACKING</div>
+      </div>
+    </div>
+    <div class="splash-bar"><div class="splash-bar-fill" id="splashBar"></div></div>
+    <div class="splash-hint" id="splashHint">inicializando sesión…</div>
+  </div>
+
+  <div class="shell" id="shell" hidden>
     <div class="titlebar">
-      <button type="button" class="drawer-toggle" id="drawerToggle" aria-label="Mostrar proyectos y archivos">
+      <button type="button" class="drawer-toggle" id="drawerToggle" aria-label="Menú">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
       </button>
       <div class="dots">
@@ -20,7 +34,15 @@
         <div class="dot g"></div>
       </div>
       <div class="title">Bebo AI — Consola Linux</div>
+      <div class="session-switch" id="sessionSwitch">
+        <select id="sessionSelect" title="Sesión tmux"></select>
+        <button type="button" id="newSessionBtn" title="Nueva sesión">+</button>
+        <button type="button" id="tmuxSplitV" title="Split vertical (tmux)">▥</button>
+        <button type="button" id="tmuxSplitH" title="Split horizontal (tmux)">▤</button>
+        <button type="button" id="tmuxNewWin" title="Nueva ventana tmux">⧉</button>
+      </div>
       <div class="conn-badge" id="conn"><span class="led"></span><span id="connText">conectando</span></div>
+      <button type="button" class="icon-btn" id="settingsBtn" title="Efectos CRT">⚙</button>
     </div>
 
     <div class="body">
@@ -29,9 +51,14 @@
         <section class="panel projects">
           <div class="panel-head">
             <h2>Proyectos</h2>
-            <button type="button" class="panel-refresh" id="refreshProjects" aria-label="Actualizar proyectos">
-              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2M14 3v3h-3M6 17v-3h3"/></svg>
-            </button>
+            <div class="panel-actions">
+              <button type="button" class="panel-btn" id="newProject" title="Nuevo proyecto">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 4v12M4 10h12"/></svg>
+              </button>
+              <button type="button" class="panel-refresh" id="refreshProjects" title="Actualizar">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2M14 3v3h-3M6 17v-3h3"/></svg>
+              </button>
+            </div>
           </div>
           <div class="panel-body" id="projectsList">
             <div class="tree-empty">Cargando…</div>
@@ -41,12 +68,54 @@
         <section class="panel files">
           <div class="panel-head">
             <h2 id="filesTitle">Archivos</h2>
-            <button type="button" class="panel-refresh" id="refreshFiles" aria-label="Actualizar archivos">
-              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2M14 3v3h-3M6 17v-3h3"/></svg>
-            </button>
+            <div class="panel-actions">
+              <button type="button" class="panel-btn" id="uploadBtn" title="Subir archivo / zip" disabled>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 14V4M6 8l4-4 4 4M4 16h12"/></svg>
+              </button>
+              <button type="button" class="panel-btn" id="downloadZipBtn" title="Descargar proyecto ZIP" disabled>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3v10M6 9l4 4 4-4M4 16h12"/></svg>
+              </button>
+              <button type="button" class="panel-btn" id="newFile" title="Nuevo archivo" disabled>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 4v12M4 10h12"/></svg>
+              </button>
+              <button type="button" class="panel-btn" id="newFolder" title="Nueva carpeta" disabled>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h5l2 2h7v8H3z"/><path d="M10 11v4M8 13h4"/></svg>
+              </button>
+              <button type="button" class="panel-refresh" id="refreshFiles" title="Actualizar">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2M14 3v3h-3M6 17v-3h3"/></svg>
+              </button>
+            </div>
           </div>
           <div class="panel-body" id="filesTree">
-            <div class="tree-empty">Elegí un proyecto arriba para ver sus archivos.</div>
+            <div class="tree-empty">Elegí un proyecto arriba.</div>
+          </div>
+        </section>
+
+        <section class="panel ports-panel">
+          <div class="panel-head">
+            <h2>Puertos web</h2>
+            <div class="panel-actions">
+              <button type="button" class="panel-refresh" id="refreshPorts" title="Actualizar puertos">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2M14 3v3h-3M6 17v-3h3"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="panel-body" id="portsList">
+            <div class="tree-empty">Ningún puerto en escucha. Arrancá una app en la terminal.</div>
+          </div>
+        </section>
+
+        <section class="panel logs-panel">
+          <div class="panel-head">
+            <h2>Logs</h2>
+            <div class="panel-actions">
+              <button type="button" class="panel-refresh" id="refreshLogs" title="Actualizar logs">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2M14 3v3h-3M6 17v-3h3"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="panel-body" id="logsList">
+            <div class="tree-empty">Seleccioná un proyecto.</div>
           </div>
         </section>
       </aside>
@@ -58,15 +127,29 @@
         <div class="statusbar">
           <div class="seg"><span id="statusDot" class="err">●</span><span id="statusText">Iniciando…</span></div>
           <div class="sep"></div>
-          <div class="seg grow"></div>
-          <div class="seg label-long">bash</div>
+          <div class="seg" id="sessionLabel">sesión: bebo</div>
           <div class="sep"></div>
-          <div class="seg label-long">autosave activo</div>
+          <div class="seg grow"></div>
+          <div class="seg label-long">tmux · real</div>
+          <div class="sep"></div>
+          <div class="seg label-long" id="authLabel">auth</div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Auth -->
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-card">
+      <h2>// acceso restringido</h2>
+      <p>Esta consola está protegida por token. Ingresá el token para continuar.</p>
+      <input type="password" id="tokenInput" placeholder="token de acceso" autocomplete="off" />
+      <button type="button" id="tokenSubmit">Autenticar</button>
+      <p class="auth-error" id="authError" hidden>Token incorrecto — acceso denegado</p>
+    </div>
+  </div>
+
+  <!-- Preview / Editor -->
   <div class="preview-overlay" id="previewOverlay"></div>
   <div class="preview-panel" id="previewPanel">
     <div class="preview-head">
@@ -77,13 +160,100 @@
     </div>
     <div class="preview-body" id="previewBody"></div>
     <div class="preview-actions">
-      <button type="button" id="previewCat">Abrir con cat en la terminal</button>
+      <button type="button" id="previewEdit">Editar</button>
+      <button type="button" id="previewSave" hidden>Guardar</button>
+      <button type="button" id="previewCat">cat → terminal</button>
+      <button type="button" id="previewDownload">Descargar</button>
+      <button type="button" id="previewDelete" class="danger">Eliminar</button>
     </div>
   </div>
+
+  <!-- Log viewer -->
+  <div class="preview-overlay" id="logOverlay"></div>
+  <div class="preview-panel log-panel" id="logPanel">
+    <div class="preview-head">
+      <span class="name" id="logName">log</span>
+      <button type="button" class="preview-close" id="logClose" aria-label="Cerrar">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <div class="preview-body"><pre id="logBody" class="log-pre"></pre></div>
+    <div class="preview-actions">
+      <button type="button" id="logRefresh">Actualizar</button>
+      <button type="button" id="logCopy">Copiar</button>
+    </div>
+  </div>
+
+  <!-- Settings CRT -->
+  <div class="modal-overlay" id="settingsOverlay">
+    <div class="modal-card settings-card">
+      <h3>Efectos CRT</h3>
+      <label class="setting-row">
+        <span>Scanlines</span>
+        <input type="range" id="crtScanlines" min="0" max="100" value="35" />
+      </label>
+      <label class="setting-row">
+        <span>Glow verde</span>
+        <input type="range" id="crtGlow" min="0" max="100" value="40" />
+      </label>
+      <label class="setting-row">
+        <span>Vignette</span>
+        <input type="range" id="crtVignette" min="0" max="100" value="30" />
+      </label>
+      <label class="setting-row check">
+        <input type="checkbox" id="crtFlicker" />
+        <span>Flicker sutil</span>
+      </label>
+      <label class="setting-row check">
+        <input type="checkbox" id="sfxMute" />
+        <span>Silenciar sonidos</span>
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="settingsReset">Reset</button>
+        <button type="button" id="settingsClose">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal genérico -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-card">
+      <h3 id="modalTitle">Acción</h3>
+      <input type="text" id="modalInput" placeholder="" autocomplete="off" />
+      <div class="modal-actions">
+        <button type="button" id="modalCancel">Cancelar</button>
+        <button type="button" id="modalConfirm">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Context menu -->
+  <div class="ctx-menu" id="ctxMenu" hidden>
+    <button type="button" data-action="rename">Renombrar</button>
+    <button type="button" data-action="download">Descargar</button>
+    <button type="button" data-action="delete" class="danger">Eliminar</button>
+  </div>
+
+  <input type="file" id="fileInput" hidden multiple />
+  <div class="toast-host" id="toastHost"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-css.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markup.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-go.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-ruby.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markdown.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

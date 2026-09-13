@@ -1,146 +1,97 @@
 #!/usr/bin/env python3
 """
-Autosave: guarda automáticamente el home del usuario en PostgreSQL.
-Se ejecuta en segundo plano y sincroniza cada AUTOSAVE_INTERVAL segundos.
+Autosave simple del contenido de ~/workspace hacia PostgreSQL.
+Guarda un snapshot periódico (tar.gz base64 o lista de archivos).
+Si no hay DATABASE_URL, no hace nada.
 """
-
 import os
 import sys
 import time
-import hashlib
+import tarfile
+import io
 import base64
-from pathlib import Path
-
-try:
-    import psycopg2
-except ImportError:
-    sys.exit(0)
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-if not DATABASE_URL:
-    sys.exit(0)
+from datetime import datetime, timezone
 
 INTERVAL = int(os.environ.get("AUTOSAVE_INTERVAL", "120"))
-HOME = Path(os.environ.get("HOME", "/home/desktop"))
+HOME = os.environ.get("HOME", "/home/desktop")
+WORKSPACE = os.path.join(HOME, "workspace")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# Carpetas/archivos a sincronizar (relativos a HOME)
-WATCH = [
-    "workspace",
-    ".bashrc",
-    ".profile",
-    ".gitconfig",
-    ".npmrc",
-    ".local",
-]
+def log(msg):
+    print(f"[autosave] {msg}", flush=True)
 
-# Extensiones / nombres que nunca se guardan
-SKIP_NAMES = {
-    "node_modules", ".git", "__pycache__", ".cache",
-    ".npm", ".cargo", "target", ".venv", "venv",
-}
-SKIP_SUFFIX = {".pyc", ".pyo", ".o", ".so", ".class"}
+def snapshot():
+    if not os.path.isdir(WORKSPACE):
+        return None
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for root, dirs, files in os.walk(WORKSPACE):
+            # ignorar ocultos
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for f in files:
+                if f.startswith("."):
+                    continue
+                full = os.path.join(root, f)
+                arcname = os.path.relpath(full, WORKSPACE)
+                try:
+                    tar.add(full, arcname=arcname)
+                except Exception:
+                    pass
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
-# Tamaño máximo por archivo (2 MB)
-MAX_BYTES = 2 * 1024 * 1024
-
-last_hashes = {}
-
-def get_conn():
-    return psycopg2.connect(DATABASE_URL)
-
-def should_skip(path: Path) -> bool:
-    for part in path.parts:
-        if part in SKIP_NAMES:
-            return True
-    if path.suffix in SKIP_SUFFIX:
-        return True
+def save_to_db(data_b64):
+    if not DATABASE_URL:
+        return False
     try:
-        if path.is_file() and path.stat().st_size > MAX_BYTES:
-            return True
-    except OSError:
-        return True
-    return False
-
-def file_hash(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-def save_file(path: Path, rel: str):
-    data = path.read_bytes()
-    is_binary = b"\x00" in data[:1024]
-    if is_binary:
-        content = base64.b64encode(data).decode("ascii")
-    else:
-        try:
-            content = data.decode("utf-8")
-        except UnicodeDecodeError:
-            content = base64.b64encode(data).decode("ascii")
-            is_binary = True
-
-    # Guardamos con ruta relativa al home para portabilidad
-    db_path = f"home/{rel}"
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO virtual_files (path, content, is_binary, updated_at)
-                VALUES (%s, %s, %s, NOW())
-                ON CONFLICT (path) DO UPDATE
-                SET content = EXCLUDED.content,
-                    is_binary = EXCLUDED.is_binary,
-                    updated_at = NOW()
-            """, (db_path, content, is_binary))
+        import psycopg2
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS bebo_snapshots (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                payload TEXT NOT NULL
+            )
+        """)
+        cur.execute(
+            "INSERT INTO bebo_snapshots (payload) VALUES (%s)",
+            (data_b64,)
+        )
+        # Mantener solo los últimos 10 snapshots
+        cur.execute("""
+            DELETE FROM bebo_snapshots
+            WHERE id NOT IN (
+                SELECT id FROM bebo_snapshots ORDER BY created_at DESC LIMIT 10
+            )
+        """)
         conn.commit()
-
-def collect_files():
-    files = []
-    for item in WATCH:
-        p = HOME / item
-        if not p.exists():
-            continue
-        if p.is_file():
-            if not should_skip(p):
-                files.append((p, item))
-        elif p.is_dir():
-            for root, dirs, names in os.walk(p):
-                # filtrar dirs in-place
-                dirs[:] = [d for d in dirs if d not in SKIP_NAMES]
-                for name in names:
-                    fp = Path(root) / name
-                    if should_skip(fp):
-                        continue
-                    rel = str(fp.relative_to(HOME))
-                    files.append((fp, rel))
-    return files
-
-def sync_once():
-    global last_hashes
-    changed = 0
-    for path, rel in collect_files():
-        try:
-            h = file_hash(path)
-            if last_hashes.get(rel) == h:
-                continue
-            save_file(path, rel)
-            last_hashes[rel] = h
-            changed += 1
-        except Exception:
-            pass
-    return changed
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        log(f"error al guardar: {e}")
+        return False
 
 def main():
-    # Esperar un poco al arranque
-    time.sleep(15)
+    if not DATABASE_URL:
+        log("DATABASE_URL no definida — autosave desactivado")
+        # Dormir para siempre para no reiniciar el proceso
+        while True:
+            time.sleep(3600)
+        return
+
+    log(f"activo cada {INTERVAL}s · workspace={WORKSPACE}")
     while True:
         try:
-            n = sync_once()
-            if n:
-                print(f"[autosave] {n} archivo(s) guardados en PostgreSQL", flush=True)
+            data = snapshot()
+            if data:
+                ok = save_to_db(data)
+                if ok:
+                    log(f"snapshot guardado ({len(data)} chars) @ {datetime.now(timezone.utc).isoformat()}")
+            else:
+                log("workspace vacío o inexistente")
         except Exception as e:
-            print(f"[autosave] error: {e}", flush=True)
+            log(f"error: {e}")
         time.sleep(INTERVAL)
 
 if __name__ == "__main__":

@@ -15,9 +15,12 @@ Ejemplo en la terminal:
 ```bash
 cd ~/workspace/mi-proyecto
 python3 -m http.server 8000
+# o: node server.js  (PORT=3000)
 ```
 
 Luego en el panel **Puertos web** aparece el link, o abrís `/p/8000/` a mano.
+
+No hace falta pagar subdominio en Render: el proxy va por path en el mismo host.
 
 ## Sonidos
 
