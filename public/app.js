@@ -849,13 +849,21 @@ async function loadProjects() {
     data.projects.forEach((p) => {
       const row = document.createElement("button");
       row.className = "project-row" + (p.name === activeProject ? " active" : "");
-      row.innerHTML = `${svgFolder}<span class="project-name">${escapeHtml(p.name)}</span><span class="project-meta">${p.itemCount}</span>`;
+      row.innerHTML = `${svgFolder}<span class="project-name">${escapeHtml(p.name)}</span><span class="project-meta">${p.itemCount}</span><span class="project-remove" role="button" tabindex="0" aria-label="Eliminar proyecto" title="Eliminar proyecto">×</span>`;
       let pressTimer = null;
       let projectDeleteTimer = null;
       let projectDeleteSeconds = 5;
       let longPressed = false;
       const projectTarget = { path: p.name, name: p.name, type: "dir" };
-      row.onclick = () => selectProject(p.name);
+      row.onclick = (event) => {
+        if (event.target.closest(".project-remove")) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (confirm(`¿Eliminar el proyecto "${p.name}" y todo su contenido?`)) deleteProject(p.name, row);
+          return;
+        }
+        selectProject(p.name);
+      };
       row.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
         longPressed = false;

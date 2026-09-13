@@ -1165,6 +1165,9 @@ body::after { opacity: calc(var(--crt-scanlines, 0.35) * 0.55); }
   box-shadow: inset 2px 0 0 var(--green), 0 0 18px rgba(50, 180, 85, 0.06);
 }
 .project-name, .row-name { letter-spacing: 0.01em; }
+.project-remove { display: inline-grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; border: 1px solid transparent; border-radius: 5px; color: var(--ink-faint); font: 15px/1 var(--font-ui); opacity: 0; transition: opacity .15s ease, color .15s ease, background .15s ease, border-color .15s ease; }
+.project-row:hover .project-remove, .project-row:focus-visible .project-remove { opacity: 1; }
+.project-remove:hover, .project-remove:focus-visible { border-color: rgba(255, 88, 88, .4); background: rgba(255, 50, 50, .12); color: #ff7777; outline: none; }
 .tree-empty { padding: 14px 10px; color: #5d8068; }
 
 .window {
