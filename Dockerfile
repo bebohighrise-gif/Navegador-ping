@@ -34,6 +34,7 @@ RUN apk add --no-cache \
     grep \
     sed \
     gawk \
+    iproute2 \
     && adduser -D -s /bin/bash desktop \
     && echo "desktop ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && mkdir -p /home/desktop/workspace /home/desktop/.local/bin \
@@ -44,7 +45,7 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
 
-COPY server.js ./
+COPY server.js workspace_api.js ./
 COPY public/ ./public/
 COPY entrypoint.sh /entrypoint.sh
 COPY db_tools/ /usr/local/bin/
