@@ -238,7 +238,7 @@ app.post("/api/sessions/kill", requireAuth, (req, res) => {
   try {
     if (process.env.DATABASE_URL) {
       try {
-        execFileSync("python3", ["/usr/local/bin/purge_session", name], {
+        execFileSync("python3", ["/usr/local/bin/purge_session.py", name], {
           env: process.env,
           timeout: 15000,
           stdio: "pipe",
