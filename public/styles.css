@@ -1559,6 +1559,13 @@ button:active { transform: scale(.98); }
 
 .resource-summary { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .03em; }
 
+/* La consola debe priorizar el prompt: métricas y estados técnicos viven en los paneles. */
+.sidebar-context .resource-summary,
+.statusbar .sep,
+.statusbar #sessionLabel,
+.statusbar .label-long { display: none; }
+.statusbar { gap: 0; }
+
 
 /* Themes */
 :root[data-theme="black"] {

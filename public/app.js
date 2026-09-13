@@ -323,8 +323,6 @@ const connBadge = document.getElementById("conn");
 const connText = document.getElementById("connText");
 const statusDot = document.getElementById("statusDot");
 const statusText = document.getElementById("statusText");
-const authLabel = document.getElementById("authLabel");
-const sessionLabel = document.getElementById("sessionLabel");
 
 function setStatus(online, text) {
   connBadge.className = "conn-badge " + (online ? "online" : "offline");
@@ -356,7 +354,6 @@ function connect() {
   let url = proto + "://" + location.host + "/ws?session=" + encodeURIComponent(activeSession);
   if (authToken) url += "&token=" + encodeURIComponent(authToken);
   ws = new WebSocket(url);
-  sessionLabel.textContent = "sesión: " + activeSession;
 
   ws.onopen = () => {
     setStatus(true, "Shell activa");
@@ -590,7 +587,6 @@ function enterSession(name) {
   connect();
   loadProjects();
   loadPorts();
-  showToast("Sesión abierta: " + activeSession, { type: "success", duration: 2200 });
   setTimeout(() => fitAddon.fit(), 30);
 }
 
@@ -604,17 +600,14 @@ function leaveSession() {
   backSessions.hidden = true;
   sidebarSessionName.textContent = "sesión: —";
   terminalSessionName.textContent = "sesión: —";
-  resourceSummary.textContent = "recursos: —";
-  projectGitSummary.textContent = "git: elegí un proyecto";
   loadSessions();
 }
 
 async function loadSystemStats() {
-  if (!resourceSummary || !sessionOpen) return;
+  if (!sessionOpen) return;
   try {
     const data = await fetchJSON("/api/system");
     const mb = Math.round((data.rss || 0) / 1024 / 1024);
-    resourceSummary.textContent = `recursos: ${mb} MB · load ${Number(data.load || 0).toFixed(2)}`;
   } catch (_) {}
 }
 setInterval(loadSystemStats, 10000);
@@ -662,7 +655,6 @@ async function createSession() {
     localStorage.setItem(SESSION_KEY, activeSession);
     await loadSessions();
     enterSession(activeSession);
-    showToast("Sesión creada: " + activeSession, { type: "success", duration: 3000 });
   } catch (err) {
     showError(err);
   }
@@ -1394,7 +1386,6 @@ async function boot() {
   try {
     const status = await fetch("/api/auth-status").then((r) => r.json());
     authRequired = Boolean(status.required);
-    authLabel.textContent = authRequired ? "auth · token" : "auth · abierta";
   } catch (_) {
     authRequired = false;
   }

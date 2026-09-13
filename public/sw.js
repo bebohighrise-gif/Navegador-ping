@@ -1,4 +1,4 @@
-const CACHE = "bebo-console-v1";
+const CACHE = "bebo-console-v2";
 const ASSETS = ["/", "/index.html", "/styles.css", "/app.js", "/bebo-hacker.webp", "/manifest.json"];
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS))));
 self.addEventListener("activate", (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))));

@@ -223,6 +223,9 @@ app.post("/api/sessions", requireAuth, (req, res) => {
       ],
       { timeout: 10000 }
     );
+    // La interfaz ya tiene su propia barra de estado; ocultar la de tmux evita
+    // duplicar el nombre de sesión, contador de ventana y fecha en la terminal.
+    execFileSync("tmux", ["set-option", "-t", name, "status", "off"], { timeout: 5000 });
     res.json({ ok: true, name });
   } catch (err) {
     res.status(500).json({ error: "create_failed", message: err.message });
@@ -611,6 +614,11 @@ wss.on("connection", (ws, req) => {
       ],
       ptyOpts
     );
+    // La UI web reemplaza la barra de tmux; desactivarla también en sesiones
+    // antiguas evita que aparezcan contador de ventana, host y fecha duplicados.
+    try {
+      execFileSync("tmux", ["set-option", "-t", sessionName, "status", "off"], { timeout: 5000 });
+    } catch (_) {}
   } catch (err) {
     console.warn("[pty] tmux falló, fallback bash:", err.message);
     try {
