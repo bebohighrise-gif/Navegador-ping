@@ -1,43 +1,33 @@
-FROM alpine:3.20
+FROM node:20-alpine
 
-# Paquetes mínimos para escritorio + VNC + noVNC
 RUN apk add --no-cache \
     bash \
-    sudo \
-    curl \
-    wget \
     python3 \
-    py3-numpy \
-    fluxbox \
-    xterm \
-    xvfb \
-    x11vnc \
-    novnc \
-    websockify \
-    font-dejavu \
-    dbus-x11 \
+    py3-pip \
+    postgresql-client \
+    curl \
+    nano \
+    git \
+    sudo \
     && adduser -D -s /bin/bash desktop \
-    && echo "desktop ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
-    && mkdir -p /home/desktop/.vnc /home/desktop/.fluxbox \
-    && chown -R desktop:desktop /home/desktop
+    && echo "desktop ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Configuración de Fluxbox (menú simple)
-RUN echo 'session.screen0.toolbar.visible: true' > /home/desktop/.fluxbox/init \
-    && echo '[begin] (Fluxbox)' > /home/desktop/.fluxbox/menu \
-    && echo '  [exec] (Terminal) {xterm}' >> /home/desktop/.fluxbox/menu \
-    && echo '  [exit] (Salir)' >> /home/desktop/.fluxbox/menu \
-    && echo '[end]' >> /home/desktop/.fluxbox/menu \
-    && chown -R desktop:desktop /home/desktop
+WORKDIR /app
 
-# Script de arranque
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
+COPY package.json ./
+RUN npm install --omit=dev
+
+COPY server.js ./
+COPY public/ ./public/
+
+# Script de persistencia
+COPY db_tools/db /usr/local/bin/db
+RUN chmod +x /usr/local/bin/db
 
 USER desktop
 WORKDIR /home/desktop
-ENV DISPLAY=:1
-ENV HOME=/home/desktop
 
-EXPOSE 6080
+ENV PORT=8080
+EXPOSE 8080
 
-CMD ["/start.sh"]
+CMD ["node", "/app/server.js"]
