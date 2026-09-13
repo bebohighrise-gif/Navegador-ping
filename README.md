@@ -1,67 +1,42 @@
 # Bebo AI · Consola Linux
 
-Consola web profesional con shell real (bash), persistencia automática en PostgreSQL y soporte multi-lenguaje.
-Optimizada para la capa gratuita de Render (512 MB).
+Consola web hacker con **tmux real**, multi-sesión, explorador, proxy de puertos (sin pagar dominio), sonidos y CRT.
 
-## Características
+## Proxy de puertos (sin custom domain de pago)
 
-- Terminal visual tipo PC (xterm.js)
-- Shell bash real
-- **Autosave** cada 2 minutos → PostgreSQL
-- **Restore automático** al arrancar
-- Python, Node, PHP, Ruby, Go, Java listos
-- Compatible con HTTPS (Render)
+Cualquier app que escuche en un puerto del contenedor se expone así:
 
-## Deploy en Render
-
-1. Web Service desde este repositorio
-2. Add-on **PostgreSQL** (inyecta `DATABASE_URL`)
-3. **Port** = `8080`
-4. Deploy
-
-URL: `https://tu-servicio.onrender.com`
-
-## Persistencia (automática)
-
-| Qué | Comportamiento |
-|-----|----------------|
-| `~/workspace` | Se guarda solo |
-| Configs (`.bashrc`, `.gitconfig`, …) | Se guardan solas |
-| `~/.local` (pip --user, etc.) | Se guarda solo |
-| Al arrancar | Se restaura todo |
-
-Comandos manuales (opcionales):
-
-```bash
-db list
-db save archivo.py
-db restore
-db pkg add htop
+```text
+https://TU_SERVICIO.onrender.com/p/8000/
 ```
 
-## Instalar software
+Ejemplo en la terminal:
 
 ```bash
-sudo apk add htop ffmpeg     # sistema
-pip3 install --user requests # Python
-npm install -g typescript    # Node
+cd ~/workspace/mi-proyecto
+python3 -m http.server 8000
 ```
 
-Trabaja siempre dentro de `~/workspace` para no perder nada.
+Luego en el panel **Puertos web** aparece el link, o abrís `/p/8000/` a mano.
+
+## Sonidos
+
+- Error / éxito / instalación (`npm install`, `pip`, etc.)
+- **Silenciar** en ⚙ → “Silenciar sonidos”
 
 ## Variables de entorno
 
-| Variable | Obligatorio | Descripción |
-|----------|-------------|-------------|
-| `DATABASE_URL` | Sí (recomendado) | Postgres de Render |
-| `PORT` | No (default 8080) | Puerto HTTP |
-| `AUTOSAVE_INTERVAL` | No (default 120) | Segundos entre guardados |
+| Variable | Descripción |
+|----------|-------------|
+| `BEBO_TOKEN` / `AUTH_TOKEN` | Token (recomendado) |
+| `DATABASE_URL` | PostgreSQL autosave + borrados |
+| `PORT` | Puerto del servidor (8080) |
+| `RENDER_EXTERNAL_HOSTNAME` | Keep-alive free tier |
 
-## Nota sobre Render free
+## Arranque local
 
-El servicio se duerme tras 15 min sin tráfico. Un ping periódico lo mantiene despierto.
-Al despertar, todo se restaura desde la base de datos.
-
-## Licencia
-
-Privado / UNLICENSED.
+```bash
+npm install
+export BEBO_TOKEN=secreto
+node server.js
+```
