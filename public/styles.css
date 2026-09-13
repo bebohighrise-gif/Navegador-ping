@@ -1597,3 +1597,126 @@ button:active { transform: scale(.98); }
 .file-icon-markdown { color: #7aa2f7; } .file-icon-shell { color: #8ae234; } .file-icon-go { color: #00add8; }
 .file-icon-rust { color: #dea584; } .file-icon-java { color: #f89820; } .file-icon-php { color: #8892be; }
 .file-icon-sql { color: #c792ea; } .file-icon-file { color: var(--green-muted); }
+
+
+/* ========== TERMINAL PRO SURFACE ========== */
+.window {
+  background: #030805;
+  border-color: rgba(114, 255, 154, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(114, 255, 154, 0.04),
+    0 24px 60px rgba(0, 0, 0, 0.58),
+    0 0 34px rgba(46, 193, 91, 0.07),
+    inset 0 0 80px rgba(0, 255, 65, 0.025);
+}
+.window-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 13px;
+  border-bottom: 1px solid rgba(86, 157, 103, 0.2);
+  background: linear-gradient(180deg, rgba(18, 36, 24, 0.9), rgba(9, 20, 13, 0.86));
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.window-title,
+.window-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.window-title span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.window-prompt {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(114, 255, 154, 0.25);
+  border-radius: 5px;
+  background: rgba(70, 206, 102, 0.1);
+  color: var(--green);
+  font-size: 12px;
+  line-height: 1;
+}
+.window-meta {
+  color: var(--ink-faint);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.window-separator { color: var(--green-faint); }
+.term-wrap {
+  position: relative;
+  isolation: isolate;
+  padding: 15px 17px 12px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(42, 153, 76, 0.09), transparent 34%),
+    linear-gradient(145deg, #020604 0%, #031009 58%, #020604 100%);
+}
+.term-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(114, 255, 154, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(114, 255, 154, 0.022) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent 80%);
+}
+.xterm { padding: 3px 2px; }
+.xterm-screen { filter: drop-shadow(0 0 4px rgba(82, 255, 134, 0.12)); }
+.terminal-toolbar {
+  min-height: 48px;
+  padding: 0 16px;
+  background: linear-gradient(180deg, rgba(13, 28, 18, 0.96), rgba(8, 17, 12, 0.9));
+  border-bottom-color: rgba(114, 255, 154, 0.2);
+}
+.terminal-context { gap: 9px; }
+.terminal-label { color: var(--green); font-weight: 500; }
+.terminal-context strong { font-size: 11.5px; }
+.terminal-live { width: 8px; height: 8px; box-shadow: 0 0 0 4px rgba(114, 255, 154, 0.08), 0 0 12px var(--green); }
+.terminal-actions { gap: 7px; }
+.terminal-actions button {
+  min-width: 68px;
+  min-height: 29px;
+  padding: 6px 10px;
+  border-color: rgba(114, 255, 154, 0.24);
+  border-radius: 7px;
+  background: rgba(4, 13, 8, 0.72);
+  color: var(--ink-dim);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  transition: border-color .16s ease, color .16s ease, background .16s ease, transform .16s ease;
+}
+.terminal-actions button:hover {
+  border-color: rgba(114, 255, 154, 0.65);
+  background: rgba(70, 206, 102, 0.13);
+  color: var(--green);
+}
+.statusbar {
+  background: linear-gradient(180deg, rgba(16, 32, 21, 0.96), rgba(10, 22, 14, 0.96));
+}
+@media (max-width: 760px) {
+  .window-head { min-height: 30px; padding: 0 10px; }
+  .window-meta { display: none; }
+  .terminal-toolbar { min-height: 45px; padding: 0 10px; }
+  .terminal-actions button { min-width: 0; padding: 6px 8px; }
+  .term-wrap { padding: 11px 9px 8px; }
+}
+@media (max-width: 430px) {
+  .terminal-context { gap: 6px; }
+  .terminal-context strong { max-width: 34vw; }
+  .terminal-actions { gap: 4px; }
+  .terminal-actions button { font-size: 8px; letter-spacing: .06em; }
+}
