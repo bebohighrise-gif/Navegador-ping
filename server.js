@@ -3,6 +3,7 @@ const http = require("http");
 const https = require("https");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const { execFileSync, execFile } = require("child_process");
 const pty = require("node-pty");
 const { WebSocketServer } = require("ws");
@@ -10,6 +11,15 @@ const workspaceApi = require("./workspace_api");
 
 const app = express();
 const server = http.createServer(app);
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "same-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+const authFailures = new Map();
 const PORT = Number(process.env.PORT) || 8080;
 const HOME = process.env.HOME || "/home/desktop";
 const WORKSPACE_ROOT = path.resolve(HOME, "workspace");
@@ -157,6 +167,12 @@ function requireAuth(req, res, next) {
   if (!AUTH_TOKEN) return next();
   const token = extractToken(req);
   if (token && token === AUTH_TOKEN) return next();
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const failures = (authFailures.get(ip) || []).filter((stamp) => now - stamp < 60000);
+  failures.push(now);
+  authFailures.set(ip, failures);
+  if (failures.length > 30) return res.status(429).json({ error: "too_many_attempts" });
   return res.status(401).json({ error: "unauthorized" });
 }
 
@@ -170,6 +186,17 @@ app.get("/", (_req, res) => {
 
 app.get("/api/auth-status", (_req, res) => {
   res.json({ required: Boolean(AUTH_TOKEN) });
+});
+
+app.get("/api/system", requireAuth, (_req, res) => {
+  const memory = process.memoryUsage();
+  res.json({
+    uptime: Math.floor(process.uptime()),
+    rss: memory.rss,
+    heap: memory.heapUsed,
+    load: os.loadavg()[0] || 0,
+    cpus: os.cpus().length,
+  });
 });
 
 // ---- Sesiones tmux ----
@@ -209,6 +236,18 @@ app.post("/api/sessions/kill", requireAuth, (req, res) => {
     return res.status(400).json({ error: "cannot_kill_default" });
   }
   try {
+    if (process.env.DATABASE_URL) {
+      try {
+        execFileSync("python3", ["/usr/local/bin/purge_session", name], {
+          env: process.env,
+          timeout: 15000,
+          stdio: "pipe",
+        });
+      } catch (dbErr) {
+        console.error("session db purge failed:", dbErr.message);
+        return res.status(500).json({ error: "session_deleted_db_purge_failed", name });
+      }
+    }
     execFileSync("tmux", ["kill-session", "-t", name], { timeout: 5000 });
     res.json({ ok: true, name });
   } catch (err) {
@@ -222,6 +261,19 @@ app.get("/api/projects", requireAuth, (_req, res) => {
     res.json({ workspace: "~/workspace", projects: workspaceApi.listProjects(WORKSPACE_ROOT) });
   } catch (err) {
     res.status(500).json({ error: "internal_error" });
+  }
+});
+
+app.get("/api/git-status", requireAuth, (req, res) => {
+  const project = String(req.query.project || "").replace(/[^a-zA-Z0-9._-]/g, "");
+  if (!project) return res.status(400).json({ error: "invalid_project" });
+  const cwd = path.join(WORKSPACE_ROOT, project);
+  try {
+    const branch = execFileSync("git", ["-C", cwd, "branch", "--show-current"], { encoding: "utf8", timeout: 5000 }).trim() || "detached";
+    const porcelain = execFileSync("git", ["-C", cwd, "status", "--porcelain"], { encoding: "utf8", timeout: 5000 });
+    res.json({ branch, changes: porcelain.split("\n").filter(Boolean).length, clean: !porcelain.trim() });
+  } catch (_) {
+    res.json({ branch: null, changes: 0, clean: true, available: false });
   }
 });
 

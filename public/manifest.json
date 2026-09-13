@@ -1,0 +1,10 @@
+{
+  "name": "Bebo AI Console",
+  "short_name": "Bebo Console",
+  "description": "Workspace terminal persistente con sesiones tmux.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050807",
+  "theme_color": "#07130c",
+  "icons": [{"src":"bebo-hacker.webp","sizes":"640x640","type":"image/webp","purpose":"any maskable"}]
+}

@@ -17,6 +17,7 @@ INTERVAL = int(os.environ.get("AUTOSAVE_INTERVAL", "120"))
 HOME = os.environ.get("HOME", "/home/desktop")
 WORKSPACE = os.path.join(HOME, "workspace")
 DATABASE_URL = os.environ.get("DATABASE_URL")
+SESSION_NAME = os.environ.get("TMUX_SESSION_NAME", "bebo")
 
 def psycopg_dsn(url):
     """Quita parámetros de clientes que libpq no reconoce."""
@@ -63,20 +64,22 @@ def save_to_db(data_b64):
             CREATE TABLE IF NOT EXISTS bebo_snapshots (
                 id SERIAL PRIMARY KEY,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                session_name TEXT NOT NULL DEFAULT 'bebo',
                 payload TEXT NOT NULL
             )
         """)
+        cur.execute("ALTER TABLE bebo_snapshots ADD COLUMN IF NOT EXISTS session_name TEXT NOT NULL DEFAULT 'bebo'")
         cur.execute(
-            "INSERT INTO bebo_snapshots (payload) VALUES (%s)",
-            (data_b64,)
+            "INSERT INTO bebo_snapshots (session_name, payload) VALUES (%s, %s)",
+            (SESSION_NAME, data_b64,)
         )
         # Mantener solo los últimos 10 snapshots
         cur.execute("""
             DELETE FROM bebo_snapshots
-            WHERE id NOT IN (
-                SELECT id FROM bebo_snapshots ORDER BY created_at DESC LIMIT 10
+            WHERE session_name = %s AND id NOT IN (
+                SELECT id FROM bebo_snapshots WHERE session_name = %s ORDER BY created_at DESC LIMIT 10
             )
-        """)
+        """, (SESSION_NAME, SESSION_NAME))
         conn.commit()
         cur.close()
         conn.close()

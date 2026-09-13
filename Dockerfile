@@ -50,7 +50,7 @@ COPY public/ ./public/
 COPY entrypoint.sh /entrypoint.sh
 COPY db_tools/ /usr/local/bin/
 
-RUN chmod +x /entrypoint.sh /usr/local/bin/db /usr/local/bin/autosave \
+RUN chmod +x /entrypoint.sh /usr/local/bin/db /usr/local/bin/autosave /usr/local/bin/purge_session \
     && chown -R desktop:desktop /app
 
 USER desktop

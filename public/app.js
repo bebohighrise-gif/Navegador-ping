@@ -479,6 +479,8 @@ const sessionGrid = document.getElementById("sessionGrid");
 const backSessions = document.getElementById("backSessions");
 const sidebarSessionName = document.getElementById("sidebarSessionName");
 const terminalSessionName = document.getElementById("terminalSessionName");
+const resourceSummary = document.getElementById("resourceSummary");
+const projectGitSummary = document.getElementById("projectGitSummary");
 let sessionOpen = false;
 
 function renderSessionCard(name, meta = {}) {
@@ -574,6 +576,7 @@ function enterSession(name) {
   sessionSelect.value = activeSession;
   sidebarSessionName.textContent = "sesión: " + activeSession;
   terminalSessionName.textContent = "sesión: " + activeSession;
+  loadSystemStats();
   term.clear();
   connect();
   loadProjects();
@@ -592,8 +595,20 @@ function leaveSession() {
   backSessions.hidden = true;
   sidebarSessionName.textContent = "sesión: —";
   terminalSessionName.textContent = "sesión: —";
+  resourceSummary.textContent = "recursos: —";
+  projectGitSummary.textContent = "git: elegí un proyecto";
   loadSessions();
 }
+
+async function loadSystemStats() {
+  if (!resourceSummary || !sessionOpen) return;
+  try {
+    const data = await fetchJSON("/api/system");
+    const mb = Math.round((data.rss || 0) / 1024 / 1024);
+    resourceSummary.textContent = `recursos: ${mb} MB · load ${Number(data.load || 0).toFixed(2)}`;
+  } catch (_) {}
+}
+setInterval(loadSystemStats, 10000);
 
 backSessions.addEventListener("click", leaveSession);
 
@@ -672,6 +687,47 @@ document.getElementById("copyTerminalBtn")?.addEventListener("click", async (eve
     setTimeout(() => { button.textContent = "copiar"; }, 1400);
   } catch (_) { showToast("No se pudo copiar la selección", { type: "error", duration: 2200 }); }
 });
+
+const commandOverlay = document.getElementById("commandOverlay");
+const commandInput = document.getElementById("commandInput");
+const commandList = document.getElementById("commandList");
+const commands = [
+  ["Nueva sesión", "Crear una sesión tmux", createSession],
+  ["Limpiar terminal", "Borrar la salida visible", () => { term.clear(); term.focus(); }],
+  ["Abrir proyectos", "Mostrar el panel de proyectos", () => document.querySelector('[data-panel="projects"]')?.click()],
+  ["Abrir archivos", "Mostrar el explorador de archivos", () => document.querySelector('[data-panel="files"]')?.click()],
+  ["Volver a sesiones", "Cerrar el workspace actual", leaveSession],
+];
+function renderCommands(query = "") {
+  const q = query.toLowerCase();
+  commandList.innerHTML = "";
+  commands.filter(([name, hint]) => (name + hint).toLowerCase().includes(q)).forEach(([name, hint], index) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "command-item";
+    item.innerHTML = `<strong>${escapeHtml(name)}</strong><small>${escapeHtml(hint)}</small><kbd>${index + 1}</kbd>`;
+    item.onclick = () => { commandOverlay.hidden = true; commands.find((cmd) => cmd[0] === name)[2](); };
+    commandList.appendChild(item);
+  });
+}
+function openCommands() {
+  commandOverlay.hidden = false;
+  renderCommands();
+  commandInput.value = "";
+  setTimeout(() => commandInput.focus(), 20);
+}
+function closeCommands() { commandOverlay.hidden = true; }
+commandInput?.addEventListener("input", () => renderCommands(commandInput.value));
+commandInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeCommands();
+  if (event.key === "Enter") commandList.querySelector(".command-item")?.click();
+});
+commandOverlay?.addEventListener("click", (event) => { if (event.target === commandOverlay) closeCommands(); });
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); openCommands(); }
+  if (event.key === "Escape" && !commandOverlay.hidden) closeCommands();
+});
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 
 // ------------------------------------------------------------------
 // Context menu
@@ -794,8 +850,18 @@ function selectProject(name) {
   loadProjects();
   loadTree(name, filesTree, 0);
   loadLogs();
+  loadGitStatus(name);
   sendInput(`cd ~/workspace/${name} && clear\n`);
   closeDrawerOnMobile();
+}
+
+async function loadGitStatus(name) {
+  if (!projectGitSummary) return;
+  try {
+    const data = await fetchJSON("/api/git-status?project=" + encodeURIComponent(name));
+    if (data.available === false) projectGitSummary.textContent = "git: no es un repositorio";
+    else projectGitSummary.textContent = `git: ${data.branch} · ${data.changes} cambio${data.changes === 1 ? "" : "s"}`;
+  } catch (_) { projectGitSummary.textContent = "git: no disponible"; }
 }
 
 async function loadTree(relPath, container, depth) {

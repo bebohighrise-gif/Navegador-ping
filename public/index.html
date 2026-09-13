@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#030605" />
   <title>Bebo AI · Consola</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="bebo-hacker.webp" type="image/webp" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -72,6 +74,8 @@
         <div class="sidebar-context">
           <span class="sidebar-kicker">workspace</span>
           <strong id="sidebarSessionName">sesión: —</strong>
+          <span class="resource-summary" id="resourceSummary">recursos: —</span>
+          <span class="resource-summary" id="projectGitSummary">git: elegí un proyecto</span>
         </div>
         <nav class="sidebar-tabs" aria-label="Paneles del workspace">
           <button type="button" class="sidebar-tab active" data-panel="projects">Proyectos</button>
@@ -278,6 +282,14 @@
 
   <input type="file" id="fileInput" hidden multiple />
   <div class="toast-host" id="toastHost"></div>
+
+  <div class="command-overlay" id="commandOverlay" hidden>
+    <div class="command-palette" role="dialog" aria-label="Paleta de comandos">
+      <div class="command-search"><span>⌘K</span><input id="commandInput" placeholder="Buscar comando…" autocomplete="off" /></div>
+      <div class="command-list" id="commandList"></div>
+      <div class="command-hint">Esc para cerrar · Enter para ejecutar</div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
