@@ -959,8 +959,37 @@ function renderTree(entries, container, basePath, depth) {
 
 function fileLanguageIcon(name) {
   const lower = name.toLowerCase();
-  const known = lower.endsWith(".py") ? ["PY", "python"] : lower.endsWith(".js") || lower.endsWith(".jsx") ? ["JS", "javascript"] : lower.endsWith(".ts") || lower.endsWith(".tsx") ? ["TS", "typescript"] : lower.endsWith(".html") ? ["<>", "html"] : lower.endsWith(".css") || lower.endsWith(".scss") ? ["#", "css"] : lower.endsWith(".json") ? ["{}", "json"] : lower.endsWith(".md") ? ["M", "markdown"] : lower.endsWith(".sh") ? ["$", "shell"] : lower.endsWith(".go") ? ["GO", "go"] : lower.endsWith(".rs") ? ["RS", "rust"] : lower.endsWith(".java") ? ["JV", "java"] : lower.endsWith(".php") ? ["PHP", "php"] : lower.endsWith(".sql") ? ["DB", "sql"] : ["·", "file"];
-  return `<span class="file-language-icon file-icon-${known[1]}" title="${known[1]}">${known[0]}</span>`;
+  let language = "file";
+  if (lower.endsWith(".py")) language = "python";
+  else if (lower.endsWith(".js") || lower.endsWith(".jsx")) language = "javascript";
+  else if (lower.endsWith(".ts") || lower.endsWith(".tsx")) language = "typescript";
+  else if (lower.endsWith(".html")) language = "html";
+  else if (lower.endsWith(".css") || lower.endsWith(".scss")) language = "css";
+  else if (lower.endsWith(".json")) language = "json";
+  else if (lower.endsWith(".md")) language = "markdown";
+  else if (lower.endsWith(".sh")) language = "shell";
+  else if (lower.endsWith(".go")) language = "go";
+  else if (lower.endsWith(".rs")) language = "rust";
+  else if (lower.endsWith(".java")) language = "java";
+  else if (lower.endsWith(".php")) language = "php";
+  else if (lower.endsWith(".sql")) language = "sql";
+  const icons = {
+    python: '<path d="M31 7c-10 0-9 4-9 4v5h10v2H14c-9 0-9 8-9 8s0 8 9 8h5v-5s0-4 4-4h9c9 0 9-8 9-8v-2c0-8-1-8-1-8H31Zm-6 5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z"/><path d="M33 41c10 0 9-4 9-4v-5H32v-2h18c9 0 9-8 9-8s0-8-9-8h-5v5s0 4-4 4h-9c-9 0-9 8-9 8v2c0 8 1 8 1 8h9Zm6-5a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/>',
+    javascript: '<path d="M8 8h48v48H8z"/><path d="M35 45c1 3 3 5 6 5 2 0 4-1 4-3 0-2-1-3-5-5-5-2-8-5-8-10 0-5 4-9 10-9 5 0 8 2 10 6l-5 3c-1-2-2-3-5-3-2 0-3 1-3 3s1 3 5 4c6 3 8 6 8 11 0 6-5 9-11 9-6 0-10-3-12-8l6-3Zm-18-21h7v17c0 6-3 9-9 9-1 0-3 0-4-1l1-6c1 1 2 1 3 1 2 0 2-1 2-3V24Z" fill="currentColor"/>',
+    typescript: '<path d="M8 8h48v48H8z"/><path d="M15 25h24v6h-9v21h-7V31h-8v-6Zm27 0h14v6h-8c-2 0-3 1-3 2 0 2 2 2 6 4 4 2 6 4 6 8 0 5-4 8-10 8-5 0-9-2-11-6l5-3c1 2 3 3 6 3 2 0 3-1 3-2s-1-2-5-3c-6-2-8-5-8-9 0-5 4-8 9-8Z" fill="currentColor"/>',
+    html: '<path d="M7 7h50l-5 45-20 6-20-6L7 7Z"/><path d="m16 18 1 11h17l-1 6H18l1 7 13 4 13-4 2-24H16Z" fill="currentColor"/><path d="M25 18h22l-1 6H25z" fill="#fff"/>',
+    css: '<path d="M7 7h50l-5 45-20 6-20-6L7 7Z"/><path d="M17 18h31l-1 6H18l1 7h27l-2 17-13 4-13-4-1-8h7l1 5 6 2 6-2 1-8H19l-2-19Z" fill="currentColor"/>',
+    json: '<path d="M24 14c-7 0-10 4-10 10v5c0 3-1 5-5 5 4 0 5 2 5 5v5c0 6 3 10 10 10h4v-6h-3c-3 0-4-2-4-5v-5c0-4-2-6-5-7 3-1 5-3 5-7v-4c0-3 1-5 4-5h3v-6h-4Zm16 0c7 0 10 4 10 10v5c0 3 1 5 5 5-4 0-5 2-5 5v5c0 6-3 10-10 10h-4v-6h3c3 0 4-2 4-5v-5c0-4 2-6 5-7-3-1-5-3-5-7v-4c0-3-1-5-4-5h-3v-6h4Z"/>',
+    markdown: '<path d="M6 15h52v34H6z"/><path d="M13 42V23h6l7 9 7-9h6v19h-7V34l-6 7-6-7v8h-7Zm31 0V23h7v13h7l-10 10-10-10h6v6Z" fill="currentColor"/>',
+    shell: '<path d="M8 10h48v44H8z"/><path d="m17 22 9 8-9 8" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 39h15" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>',
+    go: '<path d="M10 31c5-15 26-22 43-11l-5 5c-12-6-25-2-30 6 5 8 18 12 30 6l5 5c-17 11-38 4-43-11Z"/><path d="M25 28h27v6H25z" fill="currentColor"/>',
+    rust: '<path d="M32 7 38 10l7-1 3 7 7 3-1 8 4 6-4 6 1 8-7 3-3 7-8-1-6 4-6-4-8 1-3-7-7-3 1-8-4-6 4-6-1-8 7-3 3-7 8 1 6-4Z"/><path d="M22 43V22h11c7 0 10 3 10 8 0 4-2 6-5 7l6 6h-8l-5-6h-2v6h-7Zm7-12h4c2 0 3-1 3-2s-1-2-3-2h-4v4Z" fill="currentColor"/>',
+    java: '<path d="M19 48h27v4H19z"/><path d="M22 26c8 3 12 5 7 10-5 3 4 5 8 1-1 8-15 8-15 2 0-4 8-6 0-13Zm12-12c9 6-4 8 1 12 5 4 4 7-2 9 4-5-6-7-1-13 3-3 4-4 2-8Z" fill="currentColor"/><path d="M15 54h34" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+    php: '<path d="M6 32c4-12 48-12 52 0-4 12-48 12-52 0Z"/><text x="15" y="37" font-size="13" font-weight="700" fill="currentColor">PHP</text>',
+    sql: '<ellipse cx="32" cy="16" rx="20" ry="8"/><path d="M12 16v15c0 5 9 8 20 8s20-3 20-8V16" fill="none" stroke="currentColor" stroke-width="5"/><path d="M12 31v15c0 5 9 8 20 8s20-3 20-8V31" fill="none" stroke="currentColor" stroke-width="5"/>',
+    file: '<path d="M16 6h20l12 12v40H16z"/><path d="M36 6v14h12" fill="none" stroke="currentColor" stroke-width="4"/>',
+  };
+  return `<svg class="file-language-icon file-icon-${language}" viewBox="0 0 64 64" aria-label="${language}" role="img">${icons[language]}</svg>`;
 }
 
 document.getElementById("refreshProjects").onclick = loadProjects;
