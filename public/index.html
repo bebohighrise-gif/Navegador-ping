@@ -3,211 +3,87 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="theme-color" content="#0b0f14" />
+  <meta name="theme-color" content="#0a0d11" />
   <title>Bebo AI · Consola</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      height: 100%;
-      background: #0b0f14;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      overflow: hidden;
-      color: #e6edf3;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .desktop {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      background:
-        radial-gradient(ellipse at 15% 10%, #152238 0%, transparent 55%),
-        radial-gradient(ellipse at 85% 90%, #1a1230 0%, transparent 50%),
-        #0b0f14;
-    }
-    .titlebar {
-      height: 44px;
-      background: linear-gradient(180deg, #1c2330 0%, #141a24 100%);
-      border-bottom: 1px solid #2a3344;
-      display: flex;
-      align-items: center;
-      padding: 0 14px;
-      gap: 10px;
-      user-select: none;
-      flex-shrink: 0;
-    }
-    .dots { display: flex; gap: 7px; }
-    .dot { width: 12px; height: 12px; border-radius: 50%; }
-    .dot.r { background: #ff5f57; }
-    .dot.y { background: #febc2e; }
-    .dot.g { background: #28c840; }
-    .title {
-      flex: 1;
-      text-align: center;
-      font-size: 13px;
-      font-weight: 500;
-      color: #9aa7b8;
-      letter-spacing: 0.2px;
-    }
-    .badge {
-      font-size: 11px;
-      font-weight: 600;
-      background: #1e2a3a;
-      color: #fbbf24;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid #2d3b4f;
-      transition: color 0.2s;
-    }
-    .badge.online { color: #6ee7b7; }
-    .badge.offline { color: #f87171; }
-    .window {
-      flex: 1;
-      margin: 12px;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 1px solid #2a3344;
-      box-shadow: 0 24px 60px rgba(0,0,0,0.5);
-      display: flex;
-      flex-direction: column;
-      background: #0d1117;
-    }
-    .term-wrap {
-      flex: 1;
-      padding: 10px 12px 8px;
-      overflow: hidden;
-    }
-    #terminal { height: 100%; width: 100%; }
-    .status {
-      height: 30px;
-      background: #11161e;
-      border-top: 1px solid #1e2633;
-      display: flex;
-      align-items: center;
-      padding: 0 14px;
-      font-size: 11px;
-      color: #7d8a9a;
-      gap: 14px;
-      flex-shrink: 0;
-    }
-    .status .ok { color: #34d399; }
-    .status .err { color: #f87171; }
-    .status .right { margin-left: auto; opacity: 0.8; }
-    @media (max-width: 600px) {
-      .window { margin: 6px; border-radius: 10px; }
-      .titlebar { height: 40px; }
-      .title { font-size: 12px; }
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="desktop">
+  <div class="shell">
     <div class="titlebar">
+      <button type="button" class="drawer-toggle" id="drawerToggle" aria-label="Mostrar proyectos y archivos">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+      </button>
       <div class="dots">
         <div class="dot r"></div>
         <div class="dot y"></div>
         <div class="dot g"></div>
       </div>
       <div class="title">Bebo AI — Consola Linux</div>
-      <div class="badge" id="conn">conectando…</div>
+      <div class="conn-badge" id="conn"><span class="led"></span><span id="connText">conectando</span></div>
     </div>
-    <div class="window">
-      <div class="term-wrap"><div id="terminal"></div></div>
-      <div class="status">
-        <span id="statusText">Iniciando…</span>
-        <span class="right">bash · Alpine · autosave ON</span>
+
+    <div class="body">
+      <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+      <aside class="sidebar" id="sidebar">
+        <section class="panel projects">
+          <div class="panel-head">
+            <h2>Proyectos</h2>
+            <button type="button" class="panel-refresh" id="refreshProjects" aria-label="Actualizar proyectos">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2M14 3v3h-3M6 17v-3h3"/></svg>
+            </button>
+          </div>
+          <div class="panel-body" id="projectsList">
+            <div class="tree-empty">Cargando…</div>
+          </div>
+        </section>
+
+        <section class="panel files">
+          <div class="panel-head">
+            <h2 id="filesTitle">Archivos</h2>
+            <button type="button" class="panel-refresh" id="refreshFiles" aria-label="Actualizar archivos">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10a6 6 0 0 1 10.2-4.2M16 10a6 6 0 0 1-10.2 4.2M14 3v3h-3M6 17v-3h3"/></svg>
+            </button>
+          </div>
+          <div class="panel-body" id="filesTree">
+            <div class="tree-empty">Elegí un proyecto arriba para ver sus archivos.</div>
+          </div>
+        </section>
+      </aside>
+
+      <div class="window-col">
+        <div class="window">
+          <div class="term-wrap"><div id="terminal"></div></div>
+        </div>
+        <div class="statusbar">
+          <div class="seg"><span id="statusDot" class="err">●</span><span id="statusText">Iniciando…</span></div>
+          <div class="sep"></div>
+          <div class="seg grow"></div>
+          <div class="seg label-long">bash</div>
+          <div class="sep"></div>
+          <div class="seg label-long">autosave activo</div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <div class="preview-overlay" id="previewOverlay"></div>
+  <div class="preview-panel" id="previewPanel">
+    <div class="preview-head">
+      <span class="name" id="previewName">archivo</span>
+      <button type="button" class="preview-close" id="previewClose" aria-label="Cerrar">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <div class="preview-body" id="previewBody"></div>
+    <div class="preview-actions">
+      <button type="button" id="previewCat">Abrir con cat en la terminal</button>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
-  <script>
-    const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'bar',
-      fontSize: 14,
-      lineHeight: 1.2,
-      fontFamily: 'Menlo, Monaco, "Cascadia Code", "SF Mono", Consolas, monospace',
-      theme: {
-        background: '#0d1117',
-        foreground: '#e6edf3',
-        cursor: '#58a6ff',
-        cursorAccent: '#0d1117',
-        selectionBackground: '#264f78',
-        black: '#484f58', red: '#ff7b72', green: '#3fb950',
-        yellow: '#d29922', blue: '#58a6ff', magenta: '#bc8cff',
-        cyan: '#39c5cf', white: '#b1bac4',
-        brightBlack: '#6e7681', brightRed: '#ffa198', brightGreen: '#56d364',
-        brightYellow: '#e3b341', brightBlue: '#79c0ff', brightMagenta: '#d2a8ff',
-        brightCyan: '#56d4dd', brightWhite: '#f0f6fc',
-      },
-      allowProposedApi: true,
-      scrollback: 5000,
-    });
-
-    const fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
-    term.loadAddon(new WebLinksAddon.WebLinksAddon());
-    term.open(document.getElementById('terminal'));
-    fitAddon.fit();
-
-    const connBadge = document.getElementById('conn');
-    const statusText = document.getElementById('statusText');
-    let ws = null;
-    let reconnectTimer = null;
-
-    function setStatus(online, text) {
-      connBadge.textContent = online ? 'en línea' : 'desconectado';
-      connBadge.className = 'badge ' + (online ? 'online' : 'offline');
-      statusText.innerHTML = online
-        ? '<span class="ok">●</span> ' + text
-        : '<span class="err">●</span> ' + text;
-    }
-
-    function sendResize() {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-      }
-    }
-
-    function connect() {
-      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      ws = new WebSocket(proto + '://' + location.host + '/ws');
-
-      ws.onopen = () => {
-        setStatus(true, 'Shell activa');
-        sendResize();
-        term.focus();
-      };
-
-      ws.onmessage = (ev) => term.write(typeof ev.data === 'string' ? ev.data : new Uint8Array(ev.data));
-
-      ws.onclose = () => {
-        setStatus(false, 'Reconectando en 2s…');
-        reconnectTimer = setTimeout(connect, 2000);
-      };
-
-      ws.onerror = () => setStatus(false, 'Error de conexión');
-    }
-
-    term.onData((data) => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'input', data }));
-      }
-    });
-
-    window.addEventListener('resize', () => {
-      fitAddon.fit();
-      sendResize();
-    });
-
-    // Teclado móvil: enfocar al tocar
-    document.querySelector('.term-wrap').addEventListener('click', () => term.focus());
-
-    connect();
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
