@@ -5,10 +5,14 @@ RUN apk add --no-cache \
     python3 \
     py3-pip \
     postgresql-client \
+    py3-psycopg2 \
     curl \
     nano \
     git \
     sudo \
+    make \
+    g++ \
+    python3-dev \
     && adduser -D -s /bin/bash desktop \
     && echo "desktop ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
