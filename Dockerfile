@@ -2,6 +2,7 @@ FROM node:20-alpine
 
 RUN apk add --no-cache \
     bash \
+    tmux \
     python3 \
     py3-pip \
     py3-psycopg2 \
