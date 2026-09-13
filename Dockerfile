@@ -1,4 +1,4 @@
-FROM ghcr.io/linuxserver/webtop:alpine-xfce
+FROM novaspirit/alpine_xfce4_novnc
 
-# Puerto de la interfaz web noVNC / desktop
-EXPOSE 3000
+# Puerto de la interfaz web noVNC (más ligera y rápida que webtop)
+EXPOSE 6080
