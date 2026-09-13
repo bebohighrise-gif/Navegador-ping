@@ -1,39 +1,66 @@
-# Navegador-ping · Escritorio Linux visual (noVNC)
+# Bebo AI · Consola Linux
 
-Entorno de escritorio Linux ligero (Alpine + XFCE) accesible desde el navegador.
-Optimizado para la **capa gratuita de Render** (512 MB RAM).
+Consola web profesional con shell real (bash), persistencia automática en PostgreSQL y soporte multi-lenguaje.
+Optimizada para la capa gratuita de Render (512 MB).
 
-## Importante: persistencia
+## Características
 
-El disco del contenedor es **efímero**. Todo se borra cuando el servicio se reinicia o se duerme.
-
-**Solución:** se usa la base de datos PostgreSQL (`DATABASE_URL`) para no perder nada.
-
-### Comandos de persistencia (dentro de la terminal del escritorio)
-
-```bash
-db init                  # Crea las tablas (hazlo una sola vez)
-db save archivo.py       # Guarda un archivo en la BD
-db load archivo.py       # Lo recupera
-db list                  # Lista lo guardado
-db pkg add htop          # Marca un paquete para que se reinstale solo
-db restore               # Reinstala paquetes + recupera todos los archivos
-```
+- Terminal visual tipo PC (xterm.js)
+- Shell bash real
+- **Autosave** cada 2 minutos → PostgreSQL
+- **Restore automático** al arrancar
+- Python, Node, PHP, Ruby, Go, Java listos
+- Compatible con HTTPS (Render)
 
 ## Deploy en Render
 
 1. Web Service desde este repositorio
-2. Añade el add-on **PostgreSQL** (inyecta `DATABASE_URL`)
-3. Puerto del servicio: **6080**
-4. Listo
+2. Add-on **PostgreSQL** (inyecta `DATABASE_URL`)
+3. **Port** = `8080`
+4. Deploy
 
-Abre la URL de tu servicio → escritorio XFCE en el navegador.
+URL: `https://tu-servicio.onrender.com`
 
-Usuario por defecto: `alpine` / contraseña: `alpine` (si pide alguna).
+## Persistencia (automática)
 
-## Imagen base
+| Qué | Comportamiento |
+|-----|----------------|
+| `~/workspace` | Se guarda solo |
+| Configs (`.bashrc`, `.gitconfig`, …) | Se guardan solas |
+| `~/.local` (pip --user, etc.) | Se guarda solo |
+| Al arrancar | Se restaura todo |
 
-`novaspirit/alpine_xfce4_novnc` — Alpine + XFCE + noVNC, muy ligera.
+Comandos manuales (opcionales):
+
+```bash
+db list
+db save archivo.py
+db restore
+db pkg add htop
+```
+
+## Instalar software
+
+```bash
+sudo apk add htop ffmpeg     # sistema
+pip3 install --user requests # Python
+npm install -g typescript    # Node
+```
+
+Trabaja siempre dentro de `~/workspace` para no perder nada.
+
+## Variables de entorno
+
+| Variable | Obligatorio | Descripción |
+|----------|-------------|-------------|
+| `DATABASE_URL` | Sí (recomendado) | Postgres de Render |
+| `PORT` | No (default 8080) | Puerto HTTP |
+| `AUTOSAVE_INTERVAL` | No (default 120) | Segundos entre guardados |
+
+## Nota sobre Render free
+
+El servicio se duerme tras 15 min sin tráfico. Un ping periódico lo mantiene despierto.
+Al despertar, todo se restaura desde la base de datos.
 
 ## Licencia
 

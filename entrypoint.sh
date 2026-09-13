@@ -3,24 +3,32 @@ set -e
 
 export HOME=/home/desktop
 cd /home/desktop
+mkdir -p /home/desktop/workspace /home/desktop/.local/bin
 
-echo "[bebo] Iniciando consola..."
+echo "[bebo] Arrancando consola..."
 
-# 1) Inicializar tablas y restaurar todo desde PostgreSQL
 if [ -n "$DATABASE_URL" ]; then
-  echo "[bebo] Conectando a la base de datos..."
+  echo "[bebo] Inicializando persistencia..."
   python3 /usr/local/bin/db init 2>/dev/null || true
-  echo "[bebo] Restaurando archivos y estado..."
+  echo "[bebo] Restaurando estado desde PostgreSQL..."
   python3 /usr/local/bin/db restore 2>/dev/null || true
-else
-  echo "[bebo] AVISO: No hay DATABASE_URL. Nada se persistirá."
-fi
 
-# 2) Arrancar autosave en segundo plano (guarda cada 2 min)
-if [ -n "$DATABASE_URL" ]; then
+  # Autosave en background
   python3 /usr/local/bin/autosave &
   echo "[bebo] Autosave activo (cada ${AUTOSAVE_INTERVAL:-120}s)"
+else
+  echo "[bebo] AVISO: sin DATABASE_URL — no habrá persistencia"
 fi
 
-# 3) Arrancar el servidor de la consola
+# Prompt agradable
+if [ ! -f /home/desktop/.bashrc ]; then
+  cat > /home/desktop/.bashrc << 'EOF'
+export PS1='\[\e[1;32m\]desktop@beboai\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]$ '
+export PATH="$HOME/.local/bin:$PATH"
+alias ll='ls -la'
+alias workspace='cd ~/workspace'
+cd ~/workspace 2>/dev/null || true
+EOF
+fi
+
 exec node /app/server.js

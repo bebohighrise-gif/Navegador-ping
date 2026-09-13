@@ -19,8 +19,6 @@ RUN apk add --no-cache \
     python3-dev \
     libffi-dev \
     openssl-dev \
-    cargo \
-    rust \
     openjdk17-jre \
     php \
     php-cli \
@@ -51,15 +49,16 @@ COPY entrypoint.sh /entrypoint.sh
 COPY db_tools/ /usr/local/bin/
 
 RUN chmod +x /entrypoint.sh /usr/local/bin/db /usr/local/bin/autosave \
-    && ln -sf /usr/local/bin/db /usr/local/bin/db-save 2>/dev/null || true
+    && chown -R desktop:desktop /app
 
 USER desktop
 WORKDIR /home/desktop
 
 ENV PORT=8080 \
     HOME=/home/desktop \
-    PATH="/home/desktop/.local/bin:/usr/local/bin:$PATH" \
-    AUTOSAVE_INTERVAL=120
+    PATH="/home/desktop/.local/bin:/usr/local/bin:/usr/bin:/bin" \
+    AUTOSAVE_INTERVAL=120 \
+    LANG=C.UTF-8
 
 EXPOSE 8080
 
