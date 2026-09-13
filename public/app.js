@@ -323,6 +323,12 @@ const connBadge = document.getElementById("conn");
 const connText = document.getElementById("connText");
 const statusDot = document.getElementById("statusDot");
 const statusText = document.getElementById("statusText");
+const taskProgress = document.getElementById("taskProgress");
+const taskProgressLabel = document.getElementById("taskProgressLabel");
+const taskProgressValue = document.getElementById("taskProgressValue");
+const taskProgressFill = document.getElementById("taskProgressFill");
+let taskProgressTimer = null;
+let taskProgressValueNow = 0;
 
 function setStatus(online, text) {
   connBadge.className = "conn-badge " + (online ? "online" : "offline");
@@ -338,6 +344,34 @@ function sendResize() {
 function sendInput(data) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "input", data }));
+  }
+}
+
+function updateTaskProgress(value) {
+  taskProgressValueNow = Math.min(100, Math.max(0, value));
+  taskProgressValue.textContent = `${taskProgressValueNow}%`;
+  taskProgressFill.style.width = `${taskProgressValueNow}%`;
+}
+function startTaskProgress(kind = "install") {
+  taskProgressValueNow = Math.max(taskProgressValueNow, 4);
+  taskProgress.classList.toggle("download", kind === "download");
+  taskProgressLabel.textContent = kind === "download" ? "descargando paquetes" : "instalando paquetes";
+  taskProgress.hidden = false;
+  updateTaskProgress(taskProgressValueNow);
+  if (taskProgressTimer) return;
+  taskProgressTimer = setInterval(() => {
+    if (taskProgressValueNow < 92) updateTaskProgress(taskProgressValueNow + Math.max(1, Math.round((92 - taskProgressValueNow) / 10)));
+  }, 420);
+}
+function stopTaskProgress(success = true) {
+  if (!taskProgressTimer && taskProgress.hidden) return;
+  if (taskProgressTimer) { clearInterval(taskProgressTimer); taskProgressTimer = null; }
+  updateTaskProgress(success ? 100 : taskProgressValueNow);
+  if (success) {
+    setTimeout(() => {
+      taskProgress.hidden = true;
+      updateTaskProgress(0);
+    }, 900);
   }
 }
 
@@ -365,11 +399,16 @@ function connect() {
     term.write(typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data));
     // Sonidos de instalación / actividad
     const low = chunk.toLowerCase();
-    if (/npm install|pip install|yarn |pnpm |apt[- ]get|apk add|go get|bundle install|composer |downloading|installing|resolving|fetching/.test(low)) {
+    const isInstall = /npm install|pip install|yarn |pnpm |apt[- ]get|apk add|go get|bundle install|composer |installing|added \d|successfully installed/.test(low);
+    const isDownload = /downloading|fetching|resolving|receiving|downloaded|retrieving/.test(low);
+    if (isDownload) startTaskProgress("download");
+    else if (isInstall) startTaskProgress("install");
+    if (isInstall || isDownload) {
       sfxInstallStart();
     }
     if (/added \d|successfully installed|done\.|complete|exit code|error:|err!/.test(low)) {
       sfxInstallStop();
+      stopTaskProgress(!/error:|err!/.test(low));
     }
     if (/\berror\b|\bfailed\b|\bEADDRINUSE\b|\bENOENT\b/i.test(chunk) && chunk.length < 400) {
       // no spam: solo si parece línea de error corta

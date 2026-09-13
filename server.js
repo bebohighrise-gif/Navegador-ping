@@ -68,19 +68,11 @@ function sanitizeSessionName(name) {
 }
 
 function buildWelcomeCmd(sessionName) {
-  const authLine = AUTH_TOKEN
-    ? 'printf "\033[32m  [+]\033[0m auth token ON\n"'
-    : 'printf "\033[1;31m  [!]\033[0m auth abierta\n"';
   return [
     "clear",
-    'printf "\\033[1;32m╭────────────────────────────────────────────╮\\n"',
-    'printf "\\033[1;32m│  BEBO AI  ·  TERMINAL WORKSPACE            │\\n"',
-    'printf "\\033[1;32m╰────────────────────────────────────────────╯\\033[0m\\n"',
-    'printf "\\033[32m  sesión  \\033[0m' + sessionName + '\\n"',
-    'printf "\\033[32m  estado  \\033[0m conectado · tmux real\\n"',
-    authLine,
-    'printf "\\033[32m  ruta    \\033[0m ~/workspace\\n\\n"',
-    "exec bash -l",
+    // Prompt limpio: la terminal empieza directamente en ~/workspace.
+    "export PS1='\\[\\033[1;32m\\]\\w\\[\\033[0m\\] $ '",
+    "exec bash --noprofile --norc",
   ].join(" && ");
 }
 
