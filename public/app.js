@@ -4,6 +4,8 @@
 const TOKEN_KEY = "bebo_token";
 const SESSION_KEY = "bebo_session";
 const CRT_KEY = "bebo_crt";
+const THEME_KEY = "bebo_theme";
+document.documentElement.dataset.theme = localStorage.getItem(THEME_KEY) || "green";
 
 let authToken = localStorage.getItem(TOKEN_KEY) || "";
 let authRequired = false;
@@ -231,6 +233,14 @@ document.getElementById("settingsReset").onclick = () => {
   localStorage.removeItem(CRT_KEY);
   applyCrt({});
 };
+const themeSelect = document.getElementById("themeSelect");
+if (themeSelect) {
+  themeSelect.value = document.documentElement.dataset.theme;
+  themeSelect.addEventListener("change", () => {
+    document.documentElement.dataset.theme = themeSelect.value;
+    localStorage.setItem(THEME_KEY, themeSelect.value);
+  });
+}
 document.getElementById("settingsOverlay").addEventListener("click", (e) => {
   if (e.target.id === "settingsOverlay") e.target.classList.remove("open");
 });
@@ -499,7 +509,6 @@ function renderSessionCard(name, meta = {}) {
   let pressTimer = null;
   let countdownTimer = null;
   let longPressed = false;
-  let cancelDelete = false;
   const countdown = card.querySelector(".session-delete-countdown");
   const stopPress = () => {
     if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
@@ -513,21 +522,21 @@ function renderSessionCard(name, meta = {}) {
     longPressed = true;
     card.classList.add("deleting");
     let seconds = 5;
+    card.style.setProperty("--delete-progress", "0%");
     countdown.textContent = String(seconds);
     countdownTimer = setInterval(() => {
       seconds -= 1;
       countdown.textContent = String(seconds);
+      card.style.setProperty("--delete-progress", `${((5 - seconds) / 5) * 100}%`);
       if (seconds <= 0) {
         clearInterval(countdownTimer);
         countdownTimer = null;
-        if (cancelDelete) return;
         deleteSession(name, card);
       }
     }, 1000);
   };
   card.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    cancelDelete = false;
     pressTimer = setTimeout(beginDelete, 100);
   });
   card.addEventListener("pointerup", () => {
@@ -811,6 +820,8 @@ async function loadProjects() {
       row.className = "project-row" + (p.name === activeProject ? " active" : "");
       row.innerHTML = `${svgFolder}<span class="project-name">${escapeHtml(p.name)}</span><span class="project-meta">${p.itemCount}</span>`;
       let pressTimer = null;
+      let projectDeleteTimer = null;
+      let projectDeleteSeconds = 5;
       let longPressed = false;
       const projectTarget = { path: p.name, name: p.name, type: "dir" };
       row.onclick = () => selectProject(p.name);
@@ -819,9 +830,22 @@ async function loadProjects() {
         longPressed = false;
         pressTimer = setTimeout(() => {
           longPressed = true;
-          showCtxMenu(Math.min(e.clientX, window.innerWidth - 170), Math.min(e.clientY, window.innerHeight - 120), projectTarget);
-          showToast("Acciones del proyecto: " + p.name, { type: "success", duration: 1800 });
-        }, 650);
+          projectDeleteSeconds = 5;
+          row.classList.add("project-deleting");
+          row.style.setProperty("--delete-progress", "0%");
+          row.insertAdjacentHTML("beforeend", '<span class="project-delete-countdown">5</span>');
+          const counter = row.querySelector(".project-delete-countdown");
+          projectDeleteTimer = setInterval(async () => {
+            projectDeleteSeconds -= 1;
+            counter.textContent = String(projectDeleteSeconds);
+            row.style.setProperty("--delete-progress", `${((5 - projectDeleteSeconds) / 5) * 100}%`);
+            if (projectDeleteSeconds <= 0) {
+              clearInterval(projectDeleteTimer);
+              projectDeleteTimer = null;
+              await deleteProject(p.name, row);
+            }
+          }, 1000);
+        }, 100);
       });
       ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => row.addEventListener(eventName, () => {
         if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
@@ -853,6 +877,25 @@ function selectProject(name) {
   loadGitStatus(name);
   sendInput(`cd ~/workspace/${name} && clear\n`);
   closeDrawerOnMobile();
+}
+
+async function deleteProject(name, row) {
+  try {
+    await fetchJSON("/api/delete", { method: "POST", body: JSON.stringify({ path: name }) });
+    if (activeProject === name) {
+      activeProject = null;
+      filesTitle.textContent = "Archivos";
+      filesTree.innerHTML = '<div class="tree-empty">Elegí un proyecto arriba.</div>';
+      [newFileBtn, newFolderBtn, uploadBtn, downloadZipBtn].forEach((b) => (b.disabled = true));
+    }
+    row.classList.add("project-removed");
+    showToast(`Proyecto "${name}" eliminado`, { type: "success", duration: 3000 });
+    setTimeout(loadProjects, 260);
+  } catch (err) {
+    row.classList.remove("project-deleting");
+    row.querySelector(".project-delete-countdown")?.remove();
+    showError(err);
+  }
 }
 
 async function loadGitStatus(name) {
@@ -903,7 +946,7 @@ function renderTree(entries, container, basePath, depth) {
       };
       container.append(row, childWrap);
     } else {
-      row.innerHTML = `<span style="width:10px"></span>${svgFile}<span class="row-name">${escapeHtml(entry.name)}</span><span class="row-size">${formatBytes(entry.size)}</span>`;
+      row.innerHTML = `<span style="width:10px"></span>${fileLanguageIcon(entry.name)}<span class="row-name">${escapeHtml(entry.name)}</span><span class="row-size">${formatBytes(entry.size)}</span>`;
       row.onclick = () => openPreview(fullPath, entry.name);
       row.oncontextmenu = (e) => {
         e.preventDefault();
@@ -912,6 +955,12 @@ function renderTree(entries, container, basePath, depth) {
       container.appendChild(row);
     }
   });
+}
+
+function fileLanguageIcon(name) {
+  const lower = name.toLowerCase();
+  const known = lower.endsWith(".py") ? ["PY", "python"] : lower.endsWith(".js") || lower.endsWith(".jsx") ? ["JS", "javascript"] : lower.endsWith(".ts") || lower.endsWith(".tsx") ? ["TS", "typescript"] : lower.endsWith(".html") ? ["<>", "html"] : lower.endsWith(".css") || lower.endsWith(".scss") ? ["#", "css"] : lower.endsWith(".json") ? ["{}", "json"] : lower.endsWith(".md") ? ["M", "markdown"] : lower.endsWith(".sh") ? ["$", "shell"] : lower.endsWith(".go") ? ["GO", "go"] : lower.endsWith(".rs") ? ["RS", "rust"] : lower.endsWith(".java") ? ["JV", "java"] : lower.endsWith(".php") ? ["PHP", "php"] : lower.endsWith(".sql") ? ["DB", "sql"] : ["·", "file"];
+  return `<span class="file-language-icon file-icon-${known[1]}" title="${known[1]}">${known[0]}</span>`;
 }
 
 document.getElementById("refreshProjects").onclick = loadProjects;
