@@ -1579,7 +1579,8 @@ button:active { transform: scale(.98); }
 .session-card.deleting, .project-row.project-deleting {
   border-color: rgba(255, 70, 70, .78);
   color: #ffb0b0;
-  background: linear-gradient(90deg, rgba(90, 8, 8, .32) var(--delete-progress, 0%), rgba(31, 8, 8, .96) var(--delete-progress, 0%));
+  background: #210707;
+  background: color-mix(in srgb, #ff2020 var(--delete-progress, 0%), #210707);
   box-shadow: 0 0 22px rgba(255, 38, 38, .2);
 }
 .session-card.deleting .session-card-icon, .project-row.project-deleting .project-icon { color: #ff4d4d; border-color: rgba(255, 80, 80, .7); background: rgba(255, 40, 40, .16); }

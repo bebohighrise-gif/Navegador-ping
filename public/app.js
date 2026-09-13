@@ -627,8 +627,6 @@ async function loadSessions() {
     sessionSelect.innerHTML = "";
     const sessions = data.sessions || [];
     const names = sessions.map((s) => s.name);
-    if (!names.includes(activeSession)) names.unshift(activeSession);
-    if (!names.includes("bebo")) names.unshift("bebo");
     [...new Set(names)].forEach((name) => {
       const opt = document.createElement("option");
       opt.value = name;
@@ -643,6 +641,7 @@ async function loadSessions() {
         const info = sessions.find((item) => item.name === name) || {};
         sessionGrid.appendChild(renderSessionCard(name, info));
       });
+      if (!available.length) sessionGrid.innerHTML = '<div class="session-loading">No hay sesiones activas. Creá una nueva para comenzar.</div>';
     }
   } catch (err) {
     if (err.message !== "unauthorized") showError(err);

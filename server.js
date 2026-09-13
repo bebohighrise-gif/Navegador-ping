@@ -248,7 +248,14 @@ app.post("/api/sessions/kill", requireAuth, (req, res) => {
         return res.status(500).json({ error: "session_deleted_db_purge_failed", name });
       }
     }
-    execFileSync("tmux", ["kill-session", "-t", name], { timeout: 5000 });
+    try {
+      execFileSync("tmux", ["kill-session", "-t", name], { timeout: 5000, stdio: "pipe" });
+    } catch (tmuxErr) {
+      const message = String(tmuxErr.stderr || tmuxErr.message || "");
+      const socketGone = /no such file or directory|no server running|session not found/i.test(message);
+      if (!socketGone) throw tmuxErr;
+      console.warn(`tmux session ${name} already absent; treating as deleted`);
+    }
     res.json({ ok: true, name });
   } catch (err) {
     res.status(500).json({ error: "kill_failed", message: err.message });
