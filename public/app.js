@@ -238,30 +238,12 @@ document.getElementById("settingsOverlay").addEventListener("click", (e) => {
 // ------------------------------------------------------------------
 // Splash — máscara hacker + BEBO HACKING
 // ------------------------------------------------------------------
-const MASK = `
-        ▄▄▄████▄▄▄
-     ▄██████████████▄
-   ▄██████████████████▄
-  ██████████████████████
- ████▀▀██████████▀▀█████
- ███    ██▀▀▀▀██    ███
- ███▄  ▄█  ▄▄  █▄  ▄███
- ████████ ████ ████████
- ████████ ████ ████████
-  ███████▄████▄███████
-   ▀████████████████▀
-     ▀████████████▀
-        ▀▀████▀▀
-`;
-
 async function runSplash() {
   sfxBoot();
   const splash = document.getElementById("splash");
   const maskEl = document.getElementById("splashMask");
   const bar = document.getElementById("splashBar");
   const hint = document.getElementById("splashHint");
-  maskEl.textContent = MASK;
-
   const steps = [
     "cargando módulos…",
     "iniciando tmux…",

@@ -1364,3 +1364,22 @@ body::after { opacity: calc(var(--crt-scanlines, 0.35) * 0.55); }
 .shell.in-session .back-sessions { display: inline-flex; }
 
 .back-sessions[hidden] { display: none; }
+
+
+/* Vector hacker icon */
+.splash-mask {
+  display: block;
+  width: clamp(150px, 25vw, 230px);
+  height: clamp(150px, 25vw, 230px);
+  object-fit: contain;
+  font-size: initial;
+  line-height: normal;
+  color: initial;
+  filter: drop-shadow(0 0 12px rgba(68, 255, 130, 0.38));
+  opacity: 0.98;
+}
+@media (max-width: 620px) {
+  .splash-row { gap: 18px; }
+  .splash-mask { width: 150px; height: 150px; }
+  .splash-text { align-items: center; }
+}
