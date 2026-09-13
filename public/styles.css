@@ -1490,3 +1490,49 @@ body::after { opacity: calc(var(--crt-scanlines, 0.35) * 0.55); }
 @media (max-width: 620px) {
   .splash-row picture { width: 154px; height: 154px; }
 }
+
+
+/* Session hold-to-delete feedback */
+.session-card { touch-action: none; }
+.session-card-icon { position: relative; }
+.session-card-icon span,
+.session-card-icon::before,
+.session-card-icon::after { content: ""; display: block; position: absolute; border-radius: 50%; }
+.session-card-icon span { width: 9px; height: 9px; background: currentColor; box-shadow: 0 0 0 4px rgba(114, 255, 154, 0.12); }
+.session-card-icon::before { width: 20px; height: 20px; border: 1px solid currentColor; opacity: .55; }
+.session-card-icon::after { width: 28px; height: 28px; border: 1px dashed currentColor; opacity: .25; }
+.session-card.deleting {
+  border-color: rgba(255, 176, 0, 0.72);
+  background: linear-gradient(145deg, rgba(74, 53, 16, 0.9), rgba(22, 17, 7, 0.94));
+  box-shadow: 0 0 28px rgba(255, 176, 0, 0.14);
+}
+.session-card.deleting .session-card-icon { color: var(--amber); border-color: rgba(255, 176, 0, .5); background: rgba(255, 176, 0, .1); }
+.session-card.deleting .session-card-arrow { opacity: 0; }
+.session-delete-countdown {
+  position: absolute;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--amber);
+  border-radius: 50%;
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(.75);
+  transition: opacity .16s ease, transform .16s ease;
+}
+.session-card.deleting .session-delete-countdown { opacity: 1; transform: scale(1); animation: hold-pulse 1s ease-in-out infinite; }
+.session-card.deleting-final { pointer-events: none; animation: session-removed .26s ease forwards; }
+.session-card.removed { display: none; }
+@keyframes hold-pulse { 50% { box-shadow: 0 0 0 6px rgba(255, 176, 0, .08); } }
+@keyframes session-removed { to { opacity: 0; transform: scale(.94); filter: blur(3px); } }
+
+/* Cleaner terminal surface */
+.window { background: #020604; }
+.term-wrap { background: linear-gradient(145deg, #020604, #041109); }
+.xterm { padding: 4px 2px; }
+.xterm-screen { filter: drop-shadow(0 0 3px rgba(82, 255, 134, .1)); }

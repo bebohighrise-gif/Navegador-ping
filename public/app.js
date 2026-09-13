@@ -487,14 +487,80 @@ function renderSessionCard(name, meta = {}) {
   card.className = "session-card" + (name === activeSession ? " current" : "");
   card.dataset.session = name;
   card.innerHTML = `
-    <span class="session-card-icon">⌁</span>
+    <span class="session-card-icon" aria-hidden="true"><span></span></span>
     <span class="session-card-main">
       <strong>${escapeHtml(name)}</strong>
       <small>${meta.attached ? "activa ahora" : "sesión tmux disponible"}</small>
     </span>
-    <span class="session-card-arrow">→</span>`;
-  card.addEventListener("click", () => enterSession(name));
+    <span class="session-card-arrow">→</span>
+    <span class="session-delete-countdown" aria-live="polite"></span>`;
+  let pressTimer = null;
+  let countdownTimer = null;
+  let longPressed = false;
+  let cancelDelete = false;
+  const countdown = card.querySelector(".session-delete-countdown");
+  const stopPress = () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  };
+  const beginDelete = () => {
+    if (name === "bebo") {
+      showToast("La sesión bebo es la sesión principal y no se puede eliminar", { type: "error", duration: 2600 });
+      return;
+    }
+    longPressed = true;
+    card.classList.add("deleting");
+    let seconds = 5;
+    countdown.textContent = String(seconds);
+    countdownTimer = setInterval(() => {
+      seconds -= 1;
+      countdown.textContent = String(seconds);
+      if (seconds <= 0) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+        if (cancelDelete) return;
+        deleteSession(name, card);
+      }
+    }, 1000);
+  };
+  card.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    cancelDelete = false;
+    pressTimer = setTimeout(beginDelete, 100);
+  });
+  card.addEventListener("pointerup", () => {
+    if (longPressed) return;
+    stopPress();
+  });
+  card.addEventListener("pointerleave", () => {
+    if (!longPressed) stopPress();
+  });
+  card.addEventListener("pointercancel", () => {
+    if (!longPressed) stopPress();
+  });
+  card.addEventListener("click", (event) => {
+    if (longPressed) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    enterSession(name);
+  }, true);
   return card;
+}
+
+async function deleteSession(name, card) {
+  card.classList.add("deleting-final");
+  try {
+    await fetchJSON("/api/sessions/kill", { method: "POST", body: JSON.stringify({ name }) });
+    card.classList.add("removed");
+    showToast(`Sesión "${name}" eliminada`, { type: "success", duration: 3000 });
+    setTimeout(loadSessions, 260);
+  } catch (err) {
+    card.classList.remove("deleting", "deleting-final");
+    card.querySelector(".session-delete-countdown").textContent = "";
+    showError(err);
+  }
 }
 
 function enterSession(name) {
