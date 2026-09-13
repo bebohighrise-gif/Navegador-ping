@@ -68,12 +68,32 @@ function sanitizeSessionName(name) {
 }
 
 function buildWelcomeCmd(sessionName) {
+  const authLine = AUTH_TOKEN
+    ? 'printf "\\033[32m  [+] auth token ON\\n"'
+    : 'printf "\\033[1;31m  [!] auth abierta\\n"';
   return [
     "clear",
-    // Prompt limpio: la terminal empieza directamente en ~/workspace.
+    'printf "\\033[1;32m╭────────────────────────────────────────────╮\\n"',
+    'printf "\\033[1;32m│  BEBO AI  ·  WORKSPACE                    │\\n"',
+    'printf "\\033[1;32m╰────────────────────────────────────────────╯\\033[0m\\n"',
+    'printf "\\033[32m  sesión  \\033[0m' + sessionName + '\\n"',
+    'printf "\\033[32m  estado  \\033[0m conectado · sesión permanente\\n"',
+    authLine,
+    'printf "\\033[32m  ruta    \\033[0m ~/workspace\\n\\n"',
     "export PS1='\\[\\033[1;32m\\]\\w\\[\\033[0m\\] $ '",
     "exec bash --noprofile --norc",
   ].join(" && ");
+}
+
+function ensureDefaultSession() {
+  if (sessionExists(DEFAULT_SESSION)) return;
+  try {
+    execFileSync("tmux", ["new-session", "-d", "-s", DEFAULT_SESSION, "-c", path.join(HOME, "workspace"), buildWelcomeCmd(DEFAULT_SESSION)], { timeout: 10000 });
+    execFileSync("tmux", ["set-option", "-t", DEFAULT_SESSION, "status", "off"], { timeout: 5000 });
+    console.log(`[tmux] sesión permanente creada: ${DEFAULT_SESSION}`);
+  } catch (err) {
+    console.warn(`[tmux] no se pudo crear ${DEFAULT_SESSION}:`, err.message);
+  }
 }
 
 // Borrar referencia de proyecto en DB (si hay DATABASE_URL)
@@ -658,6 +678,7 @@ wss.on("connection", (ws, req) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`[bebo] puerto ${PORT}`);
+  ensureDefaultSession();
   if (AUTH_TOKEN) console.log("[bebo] auth token ACTIVO");
   else console.log("[bebo] sin token — modo abierto");
   startKeepAlive();
