@@ -10,12 +10,25 @@ import time
 import tarfile
 import io
 import base64
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from datetime import datetime, timezone
 
 INTERVAL = int(os.environ.get("AUTOSAVE_INTERVAL", "120"))
 HOME = os.environ.get("HOME", "/home/desktop")
 WORKSPACE = os.path.join(HOME, "workspace")
 DATABASE_URL = os.environ.get("DATABASE_URL")
+
+def psycopg_dsn(url):
+    """Quita parámetros de clientes que libpq no reconoce."""
+    if not url:
+        return url
+    try:
+        parts = urlsplit(url)
+        query = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+                 if key.lower() != "uselibpqcompat"]
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+    except Exception:
+        return url
 
 def log(msg):
     print(f"[autosave] {msg}", flush=True)
@@ -44,7 +57,7 @@ def save_to_db(data_b64):
         return False
     try:
         import psycopg2
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = psycopg2.connect(psycopg_dsn(DATABASE_URL))
         cur = conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS bebo_snapshots (

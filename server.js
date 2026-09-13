@@ -101,7 +101,12 @@ function purgeProjectFromDb(projectName) {
 import os, sys
 try:
     import psycopg2
-    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+    raw_url = os.environ["DATABASE_URL"]
+    parts = urlsplit(raw_url)
+    clean_query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k.lower() != "uselibpqcompat"]
+    db_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(clean_query), parts.fragment))
+    conn = psycopg2.connect(db_url)
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bebo_deleted (
