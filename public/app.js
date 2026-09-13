@@ -355,7 +355,7 @@ function updateTaskProgress(value) {
 function startTaskProgress(kind = "install") {
   taskProgressValueNow = Math.max(taskProgressValueNow, 4);
   taskProgress.classList.toggle("download", kind === "download");
-  taskProgressLabel.textContent = kind === "download" ? "descargando paquetes" : "instalando paquetes";
+  taskProgressLabel.textContent = kind === "download" ? "descargando paquetes" : kind === "process" ? "procesando tarea" : "instalando paquetes";
   taskProgress.hidden = false;
   updateTaskProgress(taskProgressValueNow);
   if (taskProgressTimer) return;
@@ -399,16 +399,20 @@ function connect() {
     term.write(typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data));
     // Sonidos de instalación / actividad
     const low = chunk.toLowerCase();
-    const isInstall = /npm install|pip install|yarn |pnpm |apt[- ]get|apk add|go get|bundle install|composer |installing|added \d|successfully installed/.test(low);
-    const isDownload = /downloading|fetching|resolving|receiving|downloaded|retrieving/.test(low);
+    const isInstall = /(?:npm|pnpm|yarn|bun)\s+(?:i|install|add|ci|update)|(?:pip3?|pipx|uv|poetry|conda|mamba)\s+(?:install|add|sync|update)|(?:apt(?:-get)?|aptitude|apk|dnf|yum|pacman|zypper|brew)\s+(?:install|add|update|upgrade)|(?:gem|cargo|go|composer|bundle|mvn|gradle|dotnet|nuget|choco|winget)\s+(?:install|add|get|restore|update|upgrade)|(?:docker|podman)\s+(?:pull|build)|(?:terraform|terragrunt)\s+init|installing|installed|added\s+\d|successfully installed/.test(low);
+    const isDownload = /(?:git\s+(?:clone|fetch|pull)|curl\s+|wget\s+|rsync\s+|docker\s+(?:pull|push)|kubectl\s+.*image|downloading|downloaded|fetching|fetched|resolving|receiving|retrieving|transfer(?:ring|red)|unpacking|extracting|cloning|cloned|pulling|pulled|install\s+.*from\s+https?:)/.test(low);
+    const isProcess = /(?:npm\s+run\s+(?:build|deploy)|pnpm\s+(?:run\s+)?(?:build|deploy)|yarn\s+(?:build|deploy)|make(?:\s|$)|cmake\s|meson\s|cargo\s+(?:build|check|test|run)|go\s+(?:build|test|run)|gradle\s+(?:build|assemble)|mvn\s+(?:package|install|verify)|docker\s+(?:build|compose|run)|podman\s+(?:build|run)|kubectl\s+(?:apply|rollout|delete)|helm\s+(?:install|upgrade)|terraform\s+(?:plan|apply|destroy)|compiling|compiled|building|built|linking|bundling|bundled|generating|generated|deploying|deployed|migrating|migrated|updating|upgraded|restoring|restored|checking|verifying|processing|progress)/.test(low);
+    const percentMatch = low.match(/(?:^|\s)(\d{1,3})\s*%/);
     if (isDownload) startTaskProgress("download");
     else if (isInstall) startTaskProgress("install");
-    if (isInstall || isDownload) {
+    else if (isProcess) startTaskProgress("process");
+    if (percentMatch) updateTaskProgress(Number(percentMatch[1]));
+    if (isInstall || isDownload || isProcess) {
       sfxInstallStart();
     }
-    if (/added \d|successfully installed|done\.|complete|exit code|error:|err!/.test(low)) {
+    if (/added \d|successfully installed|done\.|complete|completed|finished|success|exit code|error:|err!|failed/.test(low)) {
       sfxInstallStop();
-      stopTaskProgress(!/error:|err!/.test(low));
+      stopTaskProgress(!/error:|err!|failed/.test(low));
     }
     if (/\berror\b|\bfailed\b|\bEADDRINUSE\b|\bENOENT\b/i.test(chunk) && chunk.length < 400) {
       // no spam: solo si parece línea de error corta
