@@ -1,4 +1,4 @@
-FROM lscr.io/linuxserver/webtop:alpine-xfce
+FROM lscr.io/linuxserver/webtop:latest
 
-# Puerto de la interfaz web (LinuxServer usa 3000)
+# Puerto de la interfaz web (LinuxServer)
 EXPOSE 3000
