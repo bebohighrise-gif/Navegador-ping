@@ -28,6 +28,10 @@
       <button type="button" class="drawer-toggle" id="drawerToggle" aria-label="Menú">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
       </button>
+      <button type="button" class="back-sessions" id="backSessions" aria-label="Volver a sesiones" hidden>
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12.5 4.5 7 10l5.5 5.5M7.5 10H17"/></svg>
+        <span>sesiones</span>
+      </button>
       <div class="dots">
         <div class="dot r"></div>
         <div class="dot y"></div>
@@ -45,7 +49,21 @@
       <button type="button" class="icon-btn" id="settingsBtn" title="Efectos CRT">⚙</button>
     </div>
 
-    <div class="body">
+    <section class="session-home" id="sessionHome">
+      <div class="session-home-head">
+        <div>
+          <span class="eyebrow">workspace / tmux</span>
+          <h1>Tus sesiones</h1>
+          <p>Elegí una sesión para abrir su consola, archivos, puertos y logs.</p>
+        </div>
+        <button type="button" class="session-create" id="newSessionHome">+ Nueva sesión</button>
+      </div>
+      <div class="session-grid" id="sessionGrid">
+        <div class="session-loading">Cargando sesiones…</div>
+      </div>
+    </section>
+
+    <div class="body" id="sessionWorkspace" hidden>
       <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
       <aside class="sidebar" id="sidebar">
         <section class="panel projects">

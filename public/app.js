@@ -457,10 +457,7 @@ document.getElementById("tokenSubmit").onclick = () => {
   if (!t) return;
   setToken(t);
   hideAuthOverlay();
-  connect();
   loadSessions();
-  loadProjects();
-  loadPorts();
 };
 tokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("tokenSubmit").click(); });
 
@@ -494,12 +491,64 @@ document.getElementById("modalInput").addEventListener("keydown", (e) => {
 // Sessions (tmux real)
 // ------------------------------------------------------------------
 const sessionSelect = document.getElementById("sessionSelect");
+const sessionHome = document.getElementById("sessionHome");
+const sessionWorkspace = document.getElementById("sessionWorkspace");
+const sessionGrid = document.getElementById("sessionGrid");
+const backSessions = document.getElementById("backSessions");
+let sessionOpen = false;
+
+function renderSessionCard(name, meta = {}) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "session-card" + (name === activeSession ? " current" : "");
+  card.dataset.session = name;
+  card.innerHTML = `
+    <span class="session-card-icon">⌁</span>
+    <span class="session-card-main">
+      <strong>${escapeHtml(name)}</strong>
+      <small>${meta.attached ? "activa ahora" : "sesión tmux disponible"}</small>
+    </span>
+    <span class="session-card-arrow">→</span>`;
+  card.addEventListener("click", () => enterSession(name));
+  return card;
+}
+
+function enterSession(name) {
+  activeSession = name;
+  localStorage.setItem(SESSION_KEY, activeSession);
+  sessionOpen = true;
+  document.getElementById("shell").classList.add("in-session");
+  sessionHome.hidden = true;
+  sessionWorkspace.hidden = false;
+  backSessions.hidden = false;
+  sessionSelect.value = activeSession;
+  term.clear();
+  connect();
+  loadProjects();
+  loadPorts();
+  showToast("Sesión abierta: " + activeSession, { type: "success", duration: 2200 });
+  setTimeout(() => fitAddon.fit(), 30);
+}
+
+function leaveSession() {
+  sessionOpen = false;
+  document.getElementById("shell").classList.remove("in-session");
+  if (ws) { try { ws.onclose = null; ws.close(); } catch (_) {} }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  sessionWorkspace.hidden = true;
+  sessionHome.hidden = false;
+  backSessions.hidden = true;
+  loadSessions();
+}
+
+backSessions.addEventListener("click", leaveSession);
 
 async function loadSessions() {
   try {
     const data = await fetchJSON("/api/sessions");
     sessionSelect.innerHTML = "";
-    const names = (data.sessions || []).map((s) => s.name);
+    const sessions = data.sessions || [];
+    const names = sessions.map((s) => s.name);
     if (!names.includes(activeSession)) names.unshift(activeSession);
     if (!names.includes("bebo")) names.unshift("bebo");
     [...new Set(names)].forEach((name) => {
@@ -509,20 +558,25 @@ async function loadSessions() {
       if (name === activeSession) opt.selected = true;
       sessionSelect.appendChild(opt);
     });
+    if (sessionGrid) {
+      sessionGrid.innerHTML = "";
+      const available = [...new Set(names)];
+      available.forEach((name) => {
+        const info = sessions.find((item) => item.name === name) || {};
+        sessionGrid.appendChild(renderSessionCard(name, info));
+      });
+    }
   } catch (err) {
     if (err.message !== "unauthorized") showError(err);
+    if (sessionGrid) sessionGrid.innerHTML = '<div class="session-loading">No se pudieron cargar las sesiones.</div>';
   }
 }
 
 sessionSelect.addEventListener("change", () => {
-  activeSession = sessionSelect.value;
-  localStorage.setItem(SESSION_KEY, activeSession);
-  term.clear();
-  connect();
-  showToast("Sesión: " + activeSession, { type: "success", duration: 2500 });
+  enterSession(sessionSelect.value);
 });
 
-document.getElementById("newSessionBtn").onclick = async () => {
+async function createSession() {
   const name = await openModal("Nueva sesión tmux", "nombre-sesion");
   if (!name) return;
   try {
@@ -530,13 +584,14 @@ document.getElementById("newSessionBtn").onclick = async () => {
     activeSession = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 32);
     localStorage.setItem(SESSION_KEY, activeSession);
     await loadSessions();
-    term.clear();
-    connect();
+    enterSession(activeSession);
     showToast("Sesión creada: " + activeSession, { type: "success", duration: 3000 });
   } catch (err) {
     showError(err);
   }
-};
+}
+document.getElementById("newSessionBtn").onclick = createSession;
+document.getElementById("newSessionHome").onclick = createSession;
 
 // ------------------------------------------------------------------
 // Context menu
@@ -1103,10 +1158,7 @@ async function boot() {
     showAuthOverlay();
     setStatus(false, "Esperando token…");
   } else {
-    connect();
     loadSessions();
-    loadProjects();
-    loadPorts();
   }
 }
 
