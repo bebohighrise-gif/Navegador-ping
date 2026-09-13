@@ -486,8 +486,6 @@ const sessionGrid = document.getElementById("sessionGrid");
 const backSessions = document.getElementById("backSessions");
 const sidebarSessionName = document.getElementById("sidebarSessionName");
 const terminalSessionName = document.getElementById("terminalSessionName");
-const resourceSummary = document.getElementById("resourceSummary");
-const projectGitSummary = document.getElementById("projectGitSummary");
 let sessionOpen = false;
 
 function renderSessionCard(name, meta = {}) {
@@ -606,8 +604,7 @@ function leaveSession() {
 async function loadSystemStats() {
   if (!sessionOpen) return;
   try {
-    const data = await fetchJSON("/api/system");
-    const mb = Math.round((data.rss || 0) / 1024 / 1024);
+    await fetchJSON("/api/system");
   } catch (_) {}
 }
 setInterval(loadSystemStats, 10000);
@@ -890,12 +887,9 @@ async function deleteProject(name, row) {
 }
 
 async function loadGitStatus(name) {
-  if (!projectGitSummary) return;
   try {
-    const data = await fetchJSON("/api/git-status?project=" + encodeURIComponent(name));
-    if (data.available === false) projectGitSummary.textContent = "git: no es un repositorio";
-    else projectGitSummary.textContent = `git: ${data.branch} · ${data.changes} cambio${data.changes === 1 ? "" : "s"}`;
-  } catch (_) { projectGitSummary.textContent = "git: no disponible"; }
+    await fetchJSON("/api/git-status?project=" + encodeURIComponent(name));
+  } catch (_) {}
 }
 
 async function loadTree(relPath, container, depth) {
