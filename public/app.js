@@ -477,6 +477,8 @@ const sessionHome = document.getElementById("sessionHome");
 const sessionWorkspace = document.getElementById("sessionWorkspace");
 const sessionGrid = document.getElementById("sessionGrid");
 const backSessions = document.getElementById("backSessions");
+const sidebarSessionName = document.getElementById("sidebarSessionName");
+const terminalSessionName = document.getElementById("terminalSessionName");
 let sessionOpen = false;
 
 function renderSessionCard(name, meta = {}) {
@@ -504,6 +506,8 @@ function enterSession(name) {
   sessionWorkspace.hidden = false;
   backSessions.hidden = false;
   sessionSelect.value = activeSession;
+  sidebarSessionName.textContent = "sesión: " + activeSession;
+  terminalSessionName.textContent = "sesión: " + activeSession;
   term.clear();
   connect();
   loadProjects();
@@ -520,6 +524,8 @@ function leaveSession() {
   sessionWorkspace.hidden = true;
   sessionHome.hidden = false;
   backSessions.hidden = true;
+  sidebarSessionName.textContent = "sesión: —";
+  terminalSessionName.textContent = "sesión: —";
   loadSessions();
 }
 
@@ -574,6 +580,32 @@ async function createSession() {
 }
 document.getElementById("newSessionBtn").onclick = createSession;
 document.getElementById("newSessionHome").onclick = createSession;
+
+document.querySelectorAll(".sidebar-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".sidebar-tab").forEach((item) => item.classList.toggle("active", item === tab));
+    document.querySelectorAll(".sidebar .panel").forEach((panel) => panel.classList.toggle("panel-active", panel.classList.contains(tab.dataset.panel)));
+    closeDrawerOnMobile();
+  });
+});
+
+document.getElementById("clearTerminalBtn")?.addEventListener("click", () => {
+  term.clear();
+  term.focus();
+});
+document.getElementById("copyTerminalBtn")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const selection = term.getSelection();
+  if (!selection) {
+    showToast("Seleccioná texto en la terminal para copiarlo", { type: "error", duration: 2200 });
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(selection);
+    button.textContent = "copiado";
+    setTimeout(() => { button.textContent = "copiar"; }, 1400);
+  } catch (_) { showToast("No se pudo copiar la selección", { type: "error", duration: 2200 }); }
+});
 
 // ------------------------------------------------------------------
 // Context menu

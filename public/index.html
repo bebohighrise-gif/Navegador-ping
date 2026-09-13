@@ -13,7 +13,10 @@
   <!-- SPLASH BEBO HACKING -->
   <div class="splash" id="splash">
     <div class="splash-row">
-      <img class="splash-mask" id="splashMask" src="bebo-hacker.png" alt="Hacker encapuchado" />
+      <picture>
+        <source srcset="bebo-hacker.webp" type="image/webp" />
+        <img class="splash-mask" id="splashMask" src="bebo-hacker.png" alt="Hacker encapuchado" />
+      </picture>
       <div class="splash-text">
         <div class="splash-title">BEBO</div>
         <div class="splash-sub">HACKING</div>
@@ -66,6 +69,16 @@
     <div class="body" id="sessionWorkspace" hidden>
       <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
       <aside class="sidebar" id="sidebar">
+        <div class="sidebar-context">
+          <span class="sidebar-kicker">workspace</span>
+          <strong id="sidebarSessionName">sesión: —</strong>
+        </div>
+        <nav class="sidebar-tabs" aria-label="Paneles del workspace">
+          <button type="button" class="sidebar-tab active" data-panel="projects">Proyectos</button>
+          <button type="button" class="sidebar-tab" data-panel="files">Archivos</button>
+          <button type="button" class="sidebar-tab" data-panel="ports">Puertos</button>
+          <button type="button" class="sidebar-tab" data-panel="logs">Logs</button>
+        </nav>
         <section class="panel projects">
           <div class="panel-head">
             <h2>Proyectos</h2>
@@ -139,6 +152,17 @@
       </aside>
 
       <div class="window-col">
+        <div class="terminal-toolbar">
+          <div class="terminal-context">
+            <span class="terminal-live"></span>
+            <span class="terminal-label">terminal</span>
+            <strong id="terminalSessionName">sesión: —</strong>
+          </div>
+          <div class="terminal-actions">
+            <button type="button" id="clearTerminalBtn" title="Limpiar terminal">limpiar</button>
+            <button type="button" id="copyTerminalBtn" title="Copiar salida">copiar</button>
+          </div>
+        </div>
         <div class="window">
           <div class="term-wrap"><div id="terminal"></div></div>
         </div>
