@@ -1,4 +1,4 @@
-FROM ghcr.io/amhoba2014/alpine-fluxbox-novnc:latest
+FROM novaspirit/alpine_xfce4_novnc:latest
 
 # Puerto de noVNC
-EXPOSE 6900
+EXPOSE 6080
