@@ -1383,3 +1383,19 @@ body::after { opacity: calc(var(--crt-scanlines, 0.35) * 0.55); }
   .splash-mask { width: 150px; height: 150px; }
   .splash-text { align-items: center; }
 }
+
+
+/* Photo icon and long-press project actions */
+.splash-mask {
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 36%;
+  border: 2px solid rgba(114, 255, 154, 0.7);
+  box-shadow: 0 0 0 6px rgba(54, 205, 91, 0.08), 0 0 30px rgba(54, 205, 91, 0.35);
+  background: #020704;
+}
+.project-row { touch-action: manipulation; user-select: none; }
+.project-row:active { background: rgba(78, 195, 105, 0.18); }
+@media (max-width: 620px) {
+  .splash-mask { width: 154px; height: 154px; }
+}

@@ -619,6 +619,12 @@ ctxMenu.addEventListener("click", async (e) => {
       await fetchJSON("/api/delete", { method: "POST", body: JSON.stringify({ path: relPath }) });
       showToast("Eliminado (+ DB): " + name, { type: "success", duration: 3000 });
       if (previewPath === relPath) closePreview();
+      if (type === "dir" && activeProject === relPath) {
+        activeProject = null;
+        filesTitle.textContent = "Archivos";
+        filesTree.innerHTML = '<div class="tree-empty">Elegí un proyecto arriba.</div>';
+        [newFileBtn, newFolderBtn, uploadBtn, downloadZipBtn].forEach((b) => (b.disabled = true));
+      }
       if (activeProject) loadTree(activeProject, filesTree, 0);
       loadProjects();
       loadLogs();
@@ -650,10 +656,28 @@ async function loadProjects() {
       const row = document.createElement("button");
       row.className = "project-row" + (p.name === activeProject ? " active" : "");
       row.innerHTML = `${svgFolder}<span class="project-name">${escapeHtml(p.name)}</span><span class="project-meta">${p.itemCount}</span>`;
+      let pressTimer = null;
+      let longPressed = false;
+      const projectTarget = { path: p.name, name: p.name, type: "dir" };
       row.onclick = () => selectProject(p.name);
+      row.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        longPressed = false;
+        pressTimer = setTimeout(() => {
+          longPressed = true;
+          showCtxMenu(Math.min(e.clientX, window.innerWidth - 170), Math.min(e.clientY, window.innerHeight - 120), projectTarget);
+          showToast("Acciones del proyecto: " + p.name, { type: "success", duration: 1800 });
+        }, 650);
+      });
+      ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => row.addEventListener(eventName, () => {
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      }));
+      row.addEventListener("click", (e) => {
+        if (longPressed) { e.preventDefault(); e.stopImmediatePropagation(); longPressed = false; }
+      }, true);
       row.oncontextmenu = (e) => {
         e.preventDefault();
-        showCtxMenu(e.clientX, e.clientY, { path: p.name, name: p.name, type: "dir" });
+        showCtxMenu(e.clientX, e.clientY, projectTarget);
       };
       projectsList.appendChild(row);
     });
