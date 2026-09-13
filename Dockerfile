@@ -1,5 +1,4 @@
-FROM lscr.io/linuxserver/webtop:latest
+FROM amhoba2014/alpine-fluxbox-novnc:latest
 
-# Puerto fijo de la interfaz web
-ENV CUSTOM_PORT=3000
-EXPOSE 3000
+# Puerto de noVNC
+EXPOSE 6900
