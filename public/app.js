@@ -269,20 +269,25 @@ async function runSplash() {
   for (const step of hackSteps) {
     hint.textContent = step.t;
     if (step.t === "ACCESS GRANTED") {
-      hint.style.color = "var(--green)";
-      hint.style.textShadow = "0 0 12px var(--green-glow)";
-      hint.style.letterSpacing = "0.22em";
-      if (subEl) subEl.textContent = "ACCESS GRANTED";
+      hint.style.color = "#00ff66";
+      hint.style.textShadow = "0 0 14px rgba(0,255,102,0.5)";
+      hint.classList.add("glitch");
+      hint.setAttribute("data-text", "ACCESS GRANTED");
+      if (subEl) {
+        subEl.textContent = "ACCESS GRANTED";
+        subEl.classList.add("glitch");
+        subEl.setAttribute("data-text", "ACCESS GRANTED");
+      }
     }
     bar.style.width = step.p + "%";
     sfxTick();
-    await new Promise((r) => setTimeout(r, step.t === "ACCESS GRANTED" ? 520 : 180 + Math.random() * 140));
+    await new Promise((r) => setTimeout(r, step.t === "ACCESS GRANTED" ? 480 : 160 + Math.random() * 120));
   }
 
   sfxOk();
-  await new Promise((r) => setTimeout(r, 420));
+  await new Promise((r) => setTimeout(r, 380));
   splash.classList.add("fade-out");
-  await new Promise((r) => setTimeout(r, 550));
+  await new Promise((r) => setTimeout(r, 500));
   splash.hidden = true;
   document.getElementById("shell").hidden = false;
   fitAddon.fit();
@@ -299,28 +304,28 @@ const term = new Terminal({
   lineHeight: 1.35,
   fontFamily: '"Share Tech Mono", "IBM Plex Mono", Menlo, Monaco, Consolas, monospace',
   theme: {
-    background: "#020403",
-    foreground: "#00ff41",
-    cursor: "#00ff41",
-    cursorAccent: "#020403",
-    selectionBackground: "rgba(0, 255, 65, 0.25)",
-    selectionForeground: "#00ff41",
-    black: "#0a0f0c",
-    red: "#ff3333",
-    green: "#00ff41",
-    yellow: "#ffb000",
-    blue: "#00aaff",
-    magenta: "#c44dff",
-    cyan: "#00e5ff",
-    white: "#c8f0d0",
-    brightBlack: "#3d5c42",
-    brightRed: "#ff5555",
-    brightGreen: "#33ff66",
-    brightYellow: "#ffcc33",
-    brightBlue: "#33bbff",
-    brightMagenta: "#dd77ff",
-    brightCyan: "#33eeff",
-    brightWhite: "#e8ffe8",
+    background: "#0c0c0c",
+    foreground: "#e0e0e0",
+    cursor: "#e0e0e0",
+    cursorAccent: "#0c0c0c",
+    selectionBackground: "rgba(255, 255, 255, 0.22)",
+    selectionForeground: "#ffffff",
+    black: "#0c0c0c",
+    red: "#ff5555",
+    green: "#50fa7b",
+    yellow: "#f1fa8c",
+    blue: "#82aaff",
+    magenta: "#c792ea",
+    cyan: "#89ddff",
+    white: "#e0e0e0",
+    brightBlack: "#555555",
+    brightRed: "#ff6e6e",
+    brightGreen: "#69ff94",
+    brightYellow: "#ffffa5",
+    brightBlue: "#a0c4ff",
+    brightMagenta: "#d9a5ff",
+    brightCyan: "#a5f3ff",
+    brightWhite: "#ffffff",
   },
   allowProposedApi: true,
   scrollback: 8000,
@@ -336,6 +341,7 @@ const connText = document.getElementById("connText");
 const statusDot = document.getElementById("statusDot");
 const statusText = document.getElementById("statusText");
 const taskProgress = document.getElementById("taskProgress");
+if (taskProgress) { taskProgress.hidden = true; taskProgress.style.display = "none"; }
 const taskProgressLabel = document.getElementById("taskProgressLabel");
 const taskProgressValue = document.getElementById("taskProgressValue");
 const taskProgressFill = document.getElementById("taskProgressFill");
@@ -365,26 +371,11 @@ function updateTaskProgress(value) {
   taskProgressFill.style.width = `${taskProgressValueNow}%`;
 }
 function startTaskProgress(kind = "install") {
-  taskProgressValueNow = Math.max(taskProgressValueNow, 4);
-  taskProgress.classList.toggle("download", kind === "download");
-  taskProgressLabel.textContent = kind === "download" ? "descargando paquetes" : kind === "process" ? "procesando tarea" : "instalando paquetes";
-  taskProgress.hidden = false;
-  updateTaskProgress(taskProgressValueNow);
-  if (taskProgressTimer) return;
-  taskProgressTimer = setInterval(() => {
-    if (taskProgressValueNow < 92) updateTaskProgress(taskProgressValueNow + Math.max(1, Math.round((92 - taskProgressValueNow) / 10)));
-  }, 420);
+  // Desactivado: terminal pura estilo Termux
+  return;
 }
 function stopTaskProgress(success = true) {
-  if (!taskProgressTimer && taskProgress.hidden) return;
-  if (taskProgressTimer) { clearInterval(taskProgressTimer); taskProgressTimer = null; }
-  updateTaskProgress(success ? 100 : taskProgressValueNow);
-  if (success) {
-    setTimeout(() => {
-      taskProgress.hidden = true;
-      updateTaskProgress(0);
-    }, 900);
-  }
+  return;
 }
 
 function connect() {
@@ -1082,11 +1073,13 @@ newFolderBtn.onclick = async () => {
 
 // Upload
 const fileInput = document.getElementById("fileInput");
-uploadBtn.onclick = () => { if (activeProject) fileInput.click(); };
+uploadBtn.onclick = () => { fileInput.click(); };
 fileInput.onchange = async () => {
   const files = Array.from(fileInput.files || []);
   fileInput.value = "";
-  if (!activeProject || !files.length) return;
+  if (!files.length) return;
+  // Si no hay proyecto seleccionado, sube a la raíz del workspace
+  const targetProject = activeProject || "";
   for (const file of files) {
     try {
       const buf = await file.arrayBuffer();
@@ -1098,7 +1091,7 @@ fileInput.onchange = async () => {
         binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
       }
       const content_b64 = btoa(binary);
-      const rel = activeProject + "/" + file.name;
+      const rel = (activeProject ? activeProject + "/" : "") + file.name;
       const isZip = file.name.toLowerCase().endsWith(".zip");
       await fetchJSON("/api/upload-b64", {
         method: "POST",
@@ -1458,3 +1451,12 @@ async function boot() {
 }
 
 boot();
+
+// Ensure file action buttons are usable
+setTimeout(() => {
+  ["uploadBtn", "newFile", "newFolder", "downloadZipBtn"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+}, 1500);
+
