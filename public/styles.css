@@ -1,14 +1,14 @@
 @import url("https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
-:root {
+':root {
   --bg-deep: #0c0c0c;
   --bg-panel: #121212;
   --bg-elevated: #1a1a1a;
-  --bg-hover: #222222;
-  --line: #2a2a2a;
-  --line-bright: #3a3a3a;
+  --bg-hover: #252525;
+  --line: #2e2e2e;
+  --line-bright: #3d3d3d;
 
-  /* Keep green only for splash / accents that we want to stay green */
+  /* Green kept ONLY for splash + success states */
   --green: #00ff41;
   --green-dim: #00cc33;
   --green-glow: rgba(0, 255, 65, 0.35);
@@ -22,16 +22,16 @@
   --amber: #e5a50a;
   --cyan: #4fc1ff;
 
-  /* Normal shell text colors */
-  --ink: #e0e0e0;
-  --ink-dim: #a0a0a0;
-  --ink-faint: #666666;
+  /* Neutral text */
+  --ink: #e4e4e4;
+  --ink-dim: #a3a3a3;
+  --ink-faint: #6b6b6b;
 
   --font-mono: "IBM Plex Mono", "Share Tech Mono", Menlo, Monaco, "Cascadia Code", "Consolas", monospace;
   --font-ui: "IBM Plex Mono", "Share Tech Mono", monospace;
 
   --radius: 3px;
-  --glow-green: 0 0 8px var(--green-glow), 0 0 20px rgba(0, 255, 65, 0.12);
+  --glow-green: 0 0 8px var(--green-glow);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,8 +51,8 @@ button {
 }
 
 ::selection {
-  background: rgba(0, 255, 65, 0.25);
-  color: var(--green);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
 }
 
 body::after {
@@ -108,7 +108,7 @@ body::after {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg-panel);
-  color: var(--green-muted);
+  color: var(--ink-faint);
 }
 .drawer-toggle:hover { color: var(--green); border-color: var(--green-faint); }
 .drawer-toggle svg { width: 14px; height: 14px; }
@@ -202,7 +202,7 @@ body::after {
   font-weight: 400;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--green-muted);
+  color: var(--ink-faint);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -226,7 +226,7 @@ body::after {
 }
 .panel-refresh:hover,
 .panel-btn:hover:not(:disabled) {
-  color: var(--green);
+  color: var(--ink);
   background: var(--bg-hover);
 }
 .panel-btn:disabled { opacity: 0.3; cursor: default; }
@@ -240,7 +240,7 @@ body::after {
 .panel-body::-webkit-scrollbar { width: 5px; }
 .panel-body::-webkit-scrollbar-track { background: transparent; }
 .panel-body::-webkit-scrollbar-thumb {
-  background: var(--green-faint);
+  background: #3a3a3a;
   border-radius: 3px;
 }
 
@@ -271,9 +271,9 @@ body::after {
   color: var(--green);
 }
 .project-row.active {
-  background: rgba(0, 255, 65, 0.08);
-  color: var(--green);
-  box-shadow: inset 2px 0 0 var(--green);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 #4fc1ff;
 }
 .project-row.active .project-icon { color: var(--green); }
 
@@ -281,7 +281,7 @@ body::after {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: var(--green-muted);
+  color: var(--ink-faint);
 }
 .project-name {
   flex: 1;
@@ -363,7 +363,7 @@ body::after {
 .xterm { cursor: text; }
 .xterm-viewport::-webkit-scrollbar { width: 6px; }
 .xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--green-faint);
+  background: #3a3a3a;
   border-radius: 3px;
 }
 
@@ -752,8 +752,8 @@ body::after {
   color: var(--green);
 }
 .toast-actions button.copy-done {
-  color: var(--green);
-  border-color: var(--green-faint);
+  color: var(--ink);
+  border-color: var(--line-bright);
 }
 
 @keyframes toast-in {
@@ -927,7 +927,7 @@ body::after {
 .session-switch button {
   background: var(--bg-panel);
   border: 1px solid var(--line);
-  color: var(--green-muted);
+  color: var(--ink-faint);
   font-size: 14px;
   width: 24px;
   height: 24px;
@@ -1343,7 +1343,7 @@ body::after { opacity: calc(var(--crt-scanlines, 0.35) * 0.55); }
 .session-card-main { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; }
 .session-card-main strong { overflow: hidden; color: var(--ink); font-family: var(--font-mono); font-size: 14px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .session-card-main small { color: var(--ink-faint); font-size: 10px; }
-.session-card-arrow { color: var(--green-muted); font-size: 20px; transition: transform 0.16s ease; }
+.session-card-arrow { color: var(--ink-faint); font-size: 20px; transition: transform 0.16s ease; }
 .session-card:hover .session-card-arrow { color: var(--green); transform: translateX(3px); }
 .session-loading { grid-column: 1 / -1; padding: 28px; border: 1px dashed rgba(89, 151, 103, 0.25); border-radius: 10px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 11px; text-align: center; }
 
@@ -1603,7 +1603,7 @@ button:active { transform: scale(.98); }
 .file-icon-html { color: #e34f26; } .file-icon-css { color: #2965f1; } .file-icon-json { color: #a9c73f; }
 .file-icon-markdown { color: #7aa2f7; } .file-icon-shell { color: #8ae234; } .file-icon-go { color: #00add8; }
 .file-icon-rust { color: #dea584; } .file-icon-java { color: #f89820; } .file-icon-php { color: #8892be; }
-.file-icon-sql { color: #c792ea; } .file-icon-file { color: var(--green-muted); }
+.file-icon-sql { color: #c792ea; } .file-icon-file { color: var(--ink-faint); }
 
 
 /* ========== TERMINAL PRO SURFACE ========== */
@@ -2013,4 +2013,57 @@ input:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+/* ===== FORCE NEUTRAL UI (green only on splash) ===== */
+.title,
+.panel-head h2,
+.terminal-label,
+.sidebar-kicker,
+.eyebrow,
+.window-title,
+.terminal-context,
+.statusbar {
+  color: var(--ink-dim) !important;
+  text-shadow: none !important;
+}
+
+.project-row:hover,
+.tree-row:hover,
+.panel-btn:hover:not(:disabled),
+.panel-refresh:hover,
+.icon-btn:hover,
+.drawer-toggle:hover {
+  color: var(--ink) !important;
+  border-color: var(--line-bright) !important;
+  background: var(--bg-hover) !important;
+}
+
+.project-row.active {
+  background: rgba(255,255,255,0.06) !important;
+  color: var(--ink) !important;
+  box-shadow: inset 2px 0 0 #4fc1ff !important;
+}
+
+.conn-badge {
+  color: var(--ink-dim) !important;
+  border-color: var(--line) !important;
+  text-shadow: none !important;
+}
+.conn-badge.online {
+  color: #7ee787 !important;
+  border-color: #2a4a35 !important;
+}
+
+/* Keep splash green */
+.splash,
+.splash * {
+  /* splash keeps its own green styles */
+}
+.splash-title,
+.splash-sub,
+.splash-hint {
+  color: #00ff41 !important;
+  text-shadow: 0 0 16px rgba(0,255,65,0.4) !important;
 }
