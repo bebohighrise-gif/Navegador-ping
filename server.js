@@ -69,26 +69,26 @@ function sanitizeSessionName(name) {
 
 function buildWelcomeCmd(sessionName) {
   const authLine = AUTH_TOKEN
-    ? 'printf "\\033[32m  [+] auth token ON\\n"'
+    ? 'printf "\\033[37m  [+] auth token ON\\n"'
     : 'printf "\\033[1;31m  [!] auth abierta\\n"';
   return [
     "clear",
-    'printf "\\033[1;32m╭──────────────────────────────────────────────╮\\n"',
-    'printf "\\033[1;32m│                                              │\\n"',
-    'printf "\\033[1;32m│   ██████╗ ███████╗██████╗  ██████╗           │\\n"',
-    'printf "\\033[1;32m│   ██╔══██╗██╔════╝██╔══██╗██╔═══██╗          │\\n"',
-    'printf "\\033[1;32m│   ██████╔╝█████╗  ██████╔╝██║   ██║          │\\n"',
-    'printf "\\033[1;32m│   ██╔══██╗██╔══╝  ██╔══██╗██║   ██║          │\\n"',
-    'printf "\\033[1;32m│   ██████╔╝███████╗██████╔╝╚██████╔╝          │\\n"',
-    'printf "\\033[1;32m│   ╚═════╝ ╚══════╝╚═════╝  ╚═════╝           │\\n"',
-    'printf "\\033[1;32m│                                              │\\n"',
-    'printf "\\033[1;32m│            A I   ·   W O R K S P A C E       │\\n"',
-    'printf "\\033[1;32m│                                              │\\n"',
-    'printf "\\033[1;32m╰──────────────────────────────────────────────╯\\033[0m\\n\\n"',
-    'printf "\\033[32m  sesión   \\033[0m' + sessionName + '\\n"',
-    'printf "\\033[32m  estado   \\033[0mconectado · tmux real\\n"',
+    'printf "\\033[1;37m╭──────────────────────────────────────────────╮\\n"',
+    'printf "\\033[1;37m│                                              │\\n"',
+    'printf "\\033[1;37m│   ██████╗ ███████╗██████╗  ██████╗           │\\n"',
+    'printf "\\033[1;37m│   ██╔══██╗██╔════╝██╔══██╗██╔═══██╗          │\\n"',
+    'printf "\\033[1;37m│   ██████╔╝█████╗  ██████╔╝██║   ██║          │\\n"',
+    'printf "\\033[1;37m│   ██╔══██╗██╔══╝  ██╔══██╗██║   ██║          │\\n"',
+    'printf "\\033[1;37m│   ██████╔╝███████╗██████╔╝╚██████╔╝          │\\n"',
+    'printf "\\033[1;37m│   ╚═════╝ ╚══════╝╚═════╝  ╚═════╝           │\\n"',
+    'printf "\\033[1;37m│                                              │\\n"',
+    'printf "\\033[1;37m│            A I   ·   W O R K S P A C E       │\\n"',
+    'printf "\\033[1;37m│                                              │\\n"',
+    'printf "\\033[1;37m╰──────────────────────────────────────────────╯\\033[0m\\n\\n"',
+    'printf "\\033[37m  sesión   \\033[0m' + sessionName + '\\n"',
+    'printf "\\033[37m  estado   \\033[0mconectado · tmux real\\n"',
     authLine,
-    'printf "\\033[32m  ruta     \\033[0m~/workspace\\n\\n"',
+    'printf "\\033[37m  ruta     \\033[0m~/workspace\\n\\n"',
     // Prompt limpio: solo "workspace $ " (sin hostname ni números largos)
     "export PS1='\\[\\033[1;37m\\]workspace\\[\\033[0m\\] $ '",
     "cd ~/workspace 2>/dev/null || true",
