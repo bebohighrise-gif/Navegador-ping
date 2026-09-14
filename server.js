@@ -496,113 +496,225 @@ function listListeningPorts() {
       timeout: 5000,
     });
     const ports = new Set();
-    for (const line of out.split("\n")) {
-      const m = line.match(/(?:[:.]|\s)(\d{4,5})\s+.*LISTEN/i) || line.match(/:(\d{4,5})\s/);
+    for (const line of out.split("\\n")) {
+      const m = line.match(/:(\\d+)\\s/);
       if (m) {
-        const p = Number(m[1]);
-        if (p >= ALLOWED_PORT_MIN && p <= ALLOWED_PORT_MAX && !BLOCKED_PORTS.has(p)) ports.add(p);
+        const port = Number(m[1]);
+        if (port >= ALLOWED_PORT_MIN && port <= ALLOWED_PORT_MAX && !BLOCKED_PORTS.has(port)) {
+          ports.add(port);
+        }
       }
     }
-    return Array.from(ports).sort((a, b) => a - b);
+    return [...ports].sort((a, b) => a - b);
   } catch (_) {
     return [];
   }
 }
 
 app.get("/api/ports", requireAuth, (_req, res) => {
-  res.json({ ports: listListeningPorts() });
+  res.json({ ports: listListeningPorts(), proxyBase: "/p/" });
 });
 
-// Proxy middleware for /p/:port/*
-app.use("/p/:port", requireAuth, (req, res, next) => {
-  const port = parseProxyPort(req.params.port);
-  if (!port) return res.status(400).json({ error: "invalid_port" });
-  const target = `http://127.0.0.1:${port}`;
-  const url = new URL(req.url, target);
+function proxyToLocal(req, res, port, restPath) {
+  const q = req.url.includes("?") ? "?" + req.url.split("?").slice(1).join("?") : "";
+  let pathPart = restPath || "/";
+  if (!pathPart.startsWith("/")) pathPart = "/" + pathPart;
+  const headers = { ...req.headers, host: "127.0.0.1:" + port };
+  delete headers["authorization"];
+  delete headers["x-bebo-token"];
+  delete headers["content-length"];
+
   const opts = {
     hostname: "127.0.0.1",
     port,
-    path: url.pathname + url.search,
+    path: pathPart + q,
     method: req.method,
-    headers: { ...req.headers, host: `127.0.0.1:${port}` },
+    headers,
+    timeout: 30000,
   };
-  delete opts.headers["host"];
-  opts.headers.host = `127.0.0.1:${port}`;
+
   const proxyReq = http.request(opts, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    const outHeaders = { ...proxyRes.headers };
+    if (outHeaders.location) {
+      try {
+        const loc = outHeaders.location;
+        if (loc.startsWith("http://127.0.0.1") || loc.startsWith("http://localhost")) {
+          const u = new URL(loc);
+          outHeaders.location = "/p/" + port + u.pathname + u.search;
+        } else if (loc.startsWith("/")) {
+          outHeaders.location = "/p/" + port + loc;
+        }
+      } catch (_) {}
+    }
+    res.writeHead(proxyRes.statusCode || 502, outHeaders);
     proxyRes.pipe(res);
   });
+
   proxyReq.on("error", (err) => {
-    res.status(502).json({ error: "proxy_error", message: err.message });
+    if (!res.headersSent) {
+      res.status(502).type("text").send(
+        "[bebo proxy] nada escucha en el puerto " + port + "\\n" +
+        "Ejemplo: python3 -m http.server " + port + "\\n" +
+        "Luego abrí /p/" + port + "/\\n" +
+        "detalle: " + err.message + "\\n"
+      );
+    }
   });
-  req.pipe(proxyReq);
+
+  proxyReq.on("timeout", () => {
+    proxyReq.destroy();
+    if (!res.headersSent) res.status(504).send("proxy timeout");
+  });
+
+  if (req.method === "GET" || req.method === "HEAD") proxyReq.end();
+  else req.pipe(proxyReq);
+}
+
+// /p/3000  y  /p/3000/ruta...
+app.all("/p/:port", requireAuth, (req, res) => {
+  const port = parseProxyPort(req.params.port);
+  if (!port) return res.status(400).send("puerto no permitido");
+  proxyToLocal(req, res, port, "/");
 });
 
+app.all("/p/:port/*", requireAuth, (req, res) => {
+  const port = parseProxyPort(req.params.port);
+  if (!port) return res.status(400).send("puerto no permitido");
+  const rest = req.params[0] ? "/" + req.params[0] : "/";
+  proxyToLocal(req, res, port, rest);
+});
+
+
 // ---------------------------------------------------------------
-// WebSocket terminal (tmux attach)
+// WebSocket — tmux REAL por sesión
 // ---------------------------------------------------------------
 const wss = new WebSocketServer({ server, path: "/ws" });
 
 wss.on("connection", (ws, req) => {
-  const url = new URL(req.url, "http://localhost");
-  const session = sanitizeSessionName(url.searchParams.get("session")) || DEFAULT_SESSION;
-  const token = url.searchParams.get("token") || "";
-  if (AUTH_TOKEN && token !== AUTH_TOKEN) {
-    ws.close(4001, "unauthorized");
-    return;
-  }
-
-  ensureDefaultSession();
-  if (!sessionExists(session)) {
-    try {
-      execFileSync("tmux", ["new-session", "-d", "-s", session, "-c", path.join(HOME, "workspace"), buildWelcomeCmd(session)], { timeout: 10000 });
-      execFileSync("tmux", ["set-option", "-t", session, "status", "off"], { timeout: 5000 });
-    } catch (err) {
-      ws.close(1011, "session_create_failed");
+  if (AUTH_TOKEN) {
+    const url = new URL(req.url || "", `http://${req.headers.host}`);
+    const token =
+      url.searchParams.get("token") ||
+      (req.headers["sec-websocket-protocol"] || "").replace(/^token,?\s*/i, "") ||
+      "";
+    if (token !== AUTH_TOKEN) {
+      ws.close(4001, "unauthorized");
       return;
     }
   }
 
-  let cols = 80;
-  let rows = 24;
-  const term = pty.spawn("tmux", ["attach-session", "-t", session], {
-    name: "xterm-256color",
-    cols,
-    rows,
-    cwd: path.join(HOME, "workspace"),
-    env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
-  });
+  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  let sessionName = sanitizeSessionName(url.searchParams.get("session")) || DEFAULT_SESSION;
+
+  const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?";
+  console.log(`[ws] ${ip} → sesión "${sessionName}"`);
+
+  const ptyEnv = {
+    ...process.env,
+    TERM: "xterm-256color",
+    COLORTERM: "truecolor",
+    HOME,
+    USER: "desktop",
+    SHELL: "/bin/bash",
+    LANG: "C.UTF-8",
+    PATH: process.env.PATH || "/home/desktop/.local/bin:/usr/local/bin:/usr/bin:/bin",
+  };
+  const ptyOpts = { name: "xterm-256color", cols: 100, rows: 30, cwd: HOME, env: ptyEnv };
+
+  let term;
+  try {
+    // -A: attach or create — sesión tmux REAL e independiente
+    term = pty.spawn(
+      "tmux",
+      [
+        "new-session",
+        "-A",
+        "-s",
+        sessionName,
+        "-c",
+        path.join(HOME, "workspace"),
+        buildWelcomeCmd(sessionName),
+      ],
+      ptyOpts
+    );
+    // La UI web reemplaza la barra de tmux; desactivarla también en sesiones
+    // antiguas evita que aparezcan contador de ventana, host y fecha duplicados.
+    try {
+      execFileSync("tmux", ["set-option", "-t", sessionName, "status", "off"], { timeout: 5000 });
+    } catch (_) {}
+  } catch (err) {
+    console.warn("[pty] tmux falló, fallback bash:", err.message);
+    try {
+      term = pty.spawn("bash", ["-l"], ptyOpts);
+    } catch (err2) {
+      ws.close();
+      return;
+    }
+  }
 
   term.onData((data) => {
-    if (ws.readyState === 1) ws.send(data);
+    if (ws.readyState === ws.OPEN) {
+      try { ws.send(data); } catch (_) {}
+    }
   });
-  term.onExit(() => {
+
+  term.onExit(({ exitCode }) => {
+    console.log(`[pty] exit ${exitCode} sesión=${sessionName}`);
     try { ws.close(); } catch (_) {}
   });
 
-  ws.on("message", (msg) => {
+  ws.on("message", (raw) => {
     try {
-      const data = JSON.parse(msg.toString());
-      if (data.type === "input" && typeof data.data === "string") {
-        term.write(data.data);
-      } else if (data.type === "resize") {
-        cols = Math.max(20, Math.min(500, Number(data.cols) || cols));
-        rows = Math.max(5, Math.min(200, Number(data.rows) || rows));
+      const msg = JSON.parse(raw.toString());
+      if (msg.type === "resize" && term) {
+        const cols = Math.max(20, Math.min(300, msg.cols || 80));
+        const rows = Math.max(10, Math.min(100, msg.rows || 24));
         term.resize(cols, rows);
+      } else if (msg.type === "input" && term) {
+        term.write(msg.data || "");
       }
-    } catch (_) {
-      // raw binary / string fallback
-      if (typeof msg === "string" || Buffer.isBuffer(msg)) term.write(msg);
+    } catch {
+      if (term) term.write(raw.toString());
     }
   });
 
   ws.on("close", () => {
+    // Solo desengancha el cliente; la sesión tmux SIGUE VIVA
     try { term.kill(); } catch (_) {}
+    console.log(`[ws] cerrado — sesión "${sessionName}" sigue en el servidor`);
   });
+
+  ws.on("error", (err) => console.error("[ws] error:", err.message));
 });
 
-// Start
-ensureDefaultSession();
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[bebo] listening on :${PORT}`);
+  console.log(`[bebo] puerto ${PORT}`);
+  ensureDefaultSession();
+  if (AUTH_TOKEN) console.log("[bebo] auth token ACTIVO");
+  else console.log("[bebo] sin token — modo abierto");
+  startKeepAlive();
+});
+
+function startKeepAlive() {
+  const host = process.env.RENDER_EXTERNAL_HOSTNAME;
+  if (!host) {
+    console.log("[keepalive] sin RENDER_EXTERNAL_HOSTNAME");
+    return;
+  }
+  const url = `https://${host}/healthz`;
+  const INTERVAL_MS = 10 * 60 * 1000;
+  setInterval(() => {
+    https
+      .get(url, (res) => {
+        res.resume();
+        console.log(`[keepalive] ${url} -> ${res.statusCode}`);
+      })
+      .on("error", (err) => console.warn("[keepalive]", err.message));
+  }, INTERVAL_MS);
+  console.log(`[keepalive] cada 10 min → ${url}`);
+}
+
+process.on("SIGTERM", () => {
+  console.log("[bebo] SIGTERM");
+  server.close(() => process.exit(0));
 });
