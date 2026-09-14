@@ -90,7 +90,7 @@ function buildWelcomeCmd(sessionName) {
     authLine,
     'printf "\\033[32m  ruta     \\033[0m~/workspace\\n\\n"',
     // Prompt limpio: solo "workspace $ " (sin hostname ni números largos)
-    "export PS1='\\[\\033[1;32m\\]workspace\\[\\033[0m\\] $ '",
+    "export PS1='\\[\\033[1;37m\\]workspace\\[\\033[0m\\] $ '",
     "cd ~/workspace 2>/dev/null || true",
     "exec bash --noprofile --norc",
   ].join(" && ");
