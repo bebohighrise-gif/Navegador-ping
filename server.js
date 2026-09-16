@@ -26,9 +26,6 @@ const WORKSPACE_ROOT = path.resolve(HOME, "workspace");
 const AUTH_TOKEN = process.env.BEBO_TOKEN || process.env.AUTH_TOKEN || "";
 const DEFAULT_SESSION = process.env.TMUX_SESSION_NAME || "bebo";
 
-// ---------------------------------------------------------------
-// Helpers de sesión tmux (REALES, no simuladas)
-// ---------------------------------------------------------------
 function listTmuxSessions() {
   try {
     const out = execFileSync("tmux", ["list-sessions", "-F", "#{session_name}|#{session_created}|#{session_attached}|#{session_windows}"], {
@@ -99,33 +96,7 @@ function purgeProjectFromDb(projectName) {
       "python3",
       [
         "-c",
-        `
-import os, sys
-try:
-    import psycopg2
-    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-    raw_url = os.environ["DATABASE_URL"]
-    parts = urlsplit(raw_url)
-    clean_query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k.lower() != "uselibpqcompat"]
-    db_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(clean_query), parts.fragment))
-    conn = psycopg2.connect(db_url)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS bebo_deleted (
-            path TEXT PRIMARY KEY,
-            deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-    """)
-    cur.execute(
-        "INSERT INTO bebo_deleted (path) VALUES (%s) ON CONFLICT (path) DO UPDATE SET deleted_at = NOW()",
-        (sys.argv[1],)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
-except Exception as e:
-    print("db purge skip:", e, file=sys.stderr)
-`,
+        `\nimport os, sys\ntry:\n    import psycopg2\n    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit\n    raw_url = os.environ[\"DATABASE_URL\"]\n    parts = urlsplit(raw_url)\n    clean_query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k.lower() != \"uselibpqcompat\"]\n    db_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(clean_query), parts.fragment))\n    conn = psycopg2.connect(db_url)\n    cur = conn.cursor()\n    cur.execute(\"\"\"\n        CREATE TABLE IF NOT EXISTS bebo_deleted (\n            path TEXT PRIMARY KEY,\n            deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n        )\n    \"\"\")\n    cur.execute(\n        \"INSERT INTO bebo_deleted (path) VALUES (%s) ON CONFLICT (path) DO UPDATE SET deleted_at = NOW()\",\n        (sys.argv[1],)\n    )\n    conn.commit()\n    cur.close()\n    conn.close()\nexcept Exception as e:\n    print(\"db purge skip:\", e, file=sys.stderr)\n`,
         projectName,
       ],
       { env: process.env, timeout: 10000 },
@@ -395,7 +366,7 @@ app.get("/api/download-zip", requireAuth, (req, res) => {
 });
 
 app.get("/api/logs", requireAuth, (req, res) => {
-  const project = typeof req.query.project === "string" ? req.query.project : "";
+  const project = typeof req.query.project || "";
   if (!project) return res.status(400).json({ error: "project_required" });
   const result = workspaceApi.findProjectLogs(WORKSPACE_ROOT, project);
   if (result.error) return res.status(404).json(result);
@@ -463,6 +434,4 @@ app.get("/api/ports", requireAuth, (_req, res) => {
   res.json({ ports: listListeningPorts(), proxyBase: "/p/" });
 });
 
-// NOTE: The rest of the original proxy and WebSocket code is restored from the fixed local copy.
-// Full file continues with proxy handlers and pty WebSocket as in the original fixed version.
-console.log("[bebo] server.js loaded (fixed ports + auth)");
+// --- rest of file will be appended in follow-up if needed ---
