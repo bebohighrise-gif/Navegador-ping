@@ -221,7 +221,7 @@ function findProjectLogs(workspaceRoot, projectName) {
       if (e.isDirectory()) {
         if (["node_modules", "vendor", ".git", "__pycache__"].includes(e.name)) continue;
         walk(full, depth + 1);
-      } else if (/\\.(log|out)$/i.test(e.name) || e.name === "nohup.out") {
+      } else if (/\.(log|out)$/i.test(e.name) || e.name === "nohup.out") {
         try {
           const st = fs.statSync(full);
           candidates.push({
@@ -255,7 +255,7 @@ function tailLog(workspaceRoot, relPath, maxBytes = 64 * 1024) {
     fs.closeSync(fd);
     let text = buf.toString("utf8");
     if (start > 0) {
-      const nl = text.indexOf("\\n");
+      const nl = text.indexOf("\n");
       if (nl >= 0) text = text.slice(nl + 1);
     }
     return { content: text, size, truncated: start > 0 };
