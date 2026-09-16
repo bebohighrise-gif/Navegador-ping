@@ -68,32 +68,22 @@ function sanitizeSessionName(name) {
 }
 
 function buildWelcomeCmd(sessionName) {
-  const authLine = AUTH_TOKEN
-    ? 'printf "\\033[37m  [+] auth token ON\\n"'
-    : 'printf "\\033[1;31m  [!] auth abierta\\n"';
   return [
     "clear",
-    'printf "\\033[1;37m╭──────────────────────────────────────────────╮\\n"',
-    'printf "\\033[1;37m│                                              │\\n"',
-    'printf "\\033[1;37m│   ██████╗ ███████╗██████╗  ██████╗           │\\n"',
-    'printf "\\033[1;37m│   ██╔══██╗██╔════╝██╔══██╗██╔═══██╗          │\\n"',
-    'printf "\\033[1;37m│   ██████╔╝█████╗  ██████╔╝██║   ██║          │\\n"',
-    'printf "\\033[1;37m│   ██╔══██╗██╔══╝  ██╔══██╗██║   ██║          │\\n"',
-    'printf "\\033[1;37m│   ██████╔╝███████╗██████╔╝╚██████╔╝          │\\n"',
-    'printf "\\033[1;37m│   ╚═════╝ ╚══════╝╚═════╝  ╚═════╝           │\\n"',
-    'printf "\\033[1;37m│                                              │\\n"',
-    'printf "\\033[1;37m│            A I   ·   W O R K S P A C E       │\\n"',
-    'printf "\\033[1;37m│                                              │\\n"',
-    'printf "\\033[1;37m╰──────────────────────────────────────────────╯\\033[0m\\n\\n"',
-    'printf "\\033[37m  sesión   \\033[0m' + sessionName + '\\n"',
-    'printf "\\033[37m  estado   \\033[0mconectado · tmux real\\n"',
-    authLine,
-    'printf "\\033[37m  ruta     \\033[0m~/workspace\\n\\n"',
-    // Prompt limpio: solo "workspace $ " (sin hostname ni números largos)
+    // Prompt limpio y real: sin banners, sin ASCII art, sin metadata decorativa.
     "export PS1='\\[\\033[1;37m\\]workspace\\[\\033[0m\\] $ '",
     "cd ~/workspace 2>/dev/null || true",
     "exec bash --noprofile --norc",
   ].join(" && ");
+}
+
+// Comando que se inyecta en CADA conexión (nueva o reutilizada) para que el
+// prompt sea siempre consistente, incluso si la sesión tmux ya existía desde
+// antes con un PS1 distinto (por ejemplo, el prompt largo con el hostname del
+// contenedor). Se envía con eco apagado para que no se vea como si alguien
+// hubiera tipeado el comando.
+function normalizePromptCmd() {
+  return "stty -echo 2>/dev/null; export PS1='\\[\\033[1;37m\\]workspace\\[\\033[0m\\] $ '; clear; stty echo 2>/dev/null\r";
 }
 
 function ensureDefaultSession() {
@@ -258,9 +248,9 @@ app.post("/api/sessions", requireAuth, (req, res) => {
 app.post("/api/sessions/kill", requireAuth, (req, res) => {
   const name = sanitizeSessionName(req.body && req.body.name);
   if (!name) return res.status(400).json({ error: "invalid_name" });
-  if (name === DEFAULT_SESSION) {
-    return res.status(400).json({ error: "cannot_kill_default" });
-  }
+  // Nota: ya se permite matar también la sesión por defecto ("bebo"). Al
+  // reconectar, el WebSocket la vuelve a crear desde cero (tmux new-session
+  // -A) con el prompt limpio actual, sin arrastrar estado viejo.
   try {
     if (process.env.DATABASE_URL) {
       try {
@@ -642,6 +632,12 @@ wss.on("connection", (ws, req) => {
     try {
       execFileSync("tmux", ["set-option", "-t", sessionName, "status", "off"], { timeout: 5000 });
     } catch (_) {}
+    // Sea sesión nueva o reutilizada, forzar el mismo prompt limpio. Esto es
+    // lo que evita el prompt "roto" (hostname largo, sin PS1 custom) que
+    // aparecía en sesiones viejas que sobrevivían a un redeploy.
+    setTimeout(() => {
+      try { term.write(normalizePromptCmd()); } catch (_) {}
+    }, 250);
   } catch (err) {
     console.warn("[pty] tmux falló, fallback bash:", err.message);
     try {
