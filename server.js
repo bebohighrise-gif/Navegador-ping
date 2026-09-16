@@ -366,7 +366,7 @@ app.get("/api/download-zip", requireAuth, (req, res) => {
 });
 
 app.get("/api/logs", requireAuth, (req, res) => {
-  const project = typeof req.query.project || "";
+  const project = typeof req.query.project === "string" ? req.query.project : "";
   if (!project) return res.status(400).json({ error: "project_required" });
   const result = workspaceApi.findProjectLogs(WORKSPACE_ROOT, project);
   if (result.error) return res.status(404).json(result);
@@ -433,5 +433,3 @@ function listListeningPorts() {
 app.get("/api/ports", requireAuth, (_req, res) => {
   res.json({ ports: listListeningPorts(), proxyBase: "/p/" });
 });
-
-// --- rest of file will be appended in follow-up if needed ---
