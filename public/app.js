@@ -556,10 +556,6 @@ function renderSessionCard(name, meta = {}) {
     if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
   };
   const beginDelete = () => {
-    if (name === "bebo") {
-      showToast("La sesión bebo es la sesión principal y no se puede eliminar", { type: "error", duration: 2600 });
-      return;
-    }
     longPressed = true;
     card.classList.add("deleting");
     let seconds = 5;
@@ -1427,6 +1423,26 @@ setInterval(() => {
     loadPorts();
   }
 }, 8000);
+
+// ------------------------------------------------------------------
+// Auto-refresh de Proyectos y Archivos cada 5s mientras hay una sesión
+// abierta. Esto es lo que hacía que un "git clone" hecho por terminal no
+// apareciera en el panel hasta apretar el botón de refrescar a mano.
+// ------------------------------------------------------------------
+let filesAutoRefreshBusy = false;
+setInterval(async () => {
+  if (!sessionOpen) return;
+  if (filesAutoRefreshBusy) return;
+  filesAutoRefreshBusy = true;
+  try {
+    await loadProjects();
+    if (activeProject) await loadTree(activeProject, filesTree, 0);
+  } catch (_) {
+    // silencioso: no molestar con toasts en el polling de fondo
+  } finally {
+    filesAutoRefreshBusy = false;
+  }
+}, 5000);
 
 
 // ------------------------------------------------------------------
