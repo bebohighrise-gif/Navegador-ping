@@ -4,7 +4,7 @@ const https = require("https");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
-const { execFileSync, execFile } = require("child_process");
+const { execFileSync } = require("child_process");
 const pty = require("node-pty");
 const { WebSocketServer } = require("ws");
 const workspaceApi = require("./workspace_api");
@@ -20,7 +20,7 @@ app.use((_req, res, next) => {
   next();
 });
 const authFailures = new Map();
-const PORT = Number(process.env.PORT) || 8080;
+const PORT = Number(process.env.PORT) || 3000;
 const HOME = process.env.HOME || "/home/desktop";
 const WORKSPACE_ROOT = path.resolve(HOME, "workspace");
 const AUTH_TOKEN = process.env.BEBO_TOKEN || process.env.AUTH_TOKEN || "";
@@ -95,51 +95,6 @@ function ensureDefaultSession() {
   } catch (err) {
     console.warn(`[tmux] no se pudo crear ${DEFAULT_SESSION}:`, err.message);
   }
-}
-
-// Borrar referencia de proyecto en DB (si hay DATABASE_URL)
-function purgeProjectFromDb(projectName) {
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl || !projectName) return;
-  try {
-    // Marca/elimina snapshots que mencionen el proyecto (best-effort)
-    execFile(
-      "python3",
-      [
-        "-c",
-        `
-import os, sys
-try:
-    import psycopg2
-    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-    raw_url = os.environ["DATABASE_URL"]
-    parts = urlsplit(raw_url)
-    clean_query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k.lower() != "uselibpqcompat"]
-    db_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(clean_query), parts.fragment))
-    conn = psycopg2.connect(db_url, connect_timeout=5)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS bebo_deleted (
-            path TEXT PRIMARY KEY,
-            deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-    """)
-    cur.execute(
-        "INSERT INTO bebo_deleted (path) VALUES (%s) ON CONFLICT (path) DO UPDATE SET deleted_at = NOW()",
-        (sys.argv[1],)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
-except Exception as e:
-    print("db purge skip:", e, file=sys.stderr)
-`,
-        projectName,
-      ],
-      { env: process.env, timeout: 10000 },
-      () => {}
-    );
-  } catch (_) {}
 }
 
 app.use(express.json({ limit: "4mb" }));
@@ -252,18 +207,6 @@ app.post("/api/sessions/kill", requireAuth, (req, res) => {
   // reconectar, el WebSocket la vuelve a crear desde cero (tmux new-session
   // -A) con el prompt limpio actual, sin arrastrar estado viejo.
   try {
-    if (process.env.DATABASE_URL) {
-      try {
-        execFileSync("python3", ["/usr/local/bin/purge_session.py", name], {
-          env: process.env,
-          timeout: 15000,
-          stdio: "pipe",
-        });
-      } catch (dbErr) {
-        // La DB es opcional: si está caída, la sesión local todavía se puede eliminar.
-        console.warn("session db purge skipped:", dbErr.message);
-      }
-    }
     try {
       execFileSync("tmux", ["kill-session", "-t", name], { timeout: 5000, stdio: "pipe" });
     } catch (tmuxErr) {

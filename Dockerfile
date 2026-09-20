@@ -46,20 +46,18 @@ RUN npm install --omit=dev
 COPY server.js workspace_api.js ./
 COPY public/ ./public/
 COPY entrypoint.sh /entrypoint.sh
-COPY db_tools/ /usr/local/bin/
-
-RUN chmod +x /entrypoint.sh /usr/local/bin/db /usr/local/bin/autosave /usr/local/bin/purge_session /usr/local/bin/purge_session.py /usr/local/bin/restore_workspace.py \
+RUN chmod +x /entrypoint.sh \
     && chown -R desktop:desktop /app
 
 USER desktop
 WORKDIR /home/desktop
 
-ENV PORT=8080 \
+ENV PORT=3000 \
     HOME=/home/desktop \
     PATH="/home/desktop/.local/bin:/usr/local/bin:/usr/bin:/bin" \
     AUTOSAVE_INTERVAL=120 \
     LANG=C.UTF-8
 
-EXPOSE 8080
+EXPOSE 3000
 
 ENTRYPOINT ["/entrypoint.sh"]
