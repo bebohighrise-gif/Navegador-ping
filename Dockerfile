@@ -5,8 +5,6 @@ RUN apk add --no-cache \
     tmux \
     python3 \
     py3-pip \
-    py3-psycopg2 \
-    postgresql-client \
     curl \
     wget \
     nano \

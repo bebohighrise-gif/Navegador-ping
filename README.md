@@ -2,20 +2,11 @@
 
 Consola web hacker con **tmux real**, multi-sesión, explorador, proxy de puertos (sin pagar dominio), sonidos y CRT.
 
-## Persistencia (todo nace de la base de datos)
+## Persistencia opcional
 
-El disco de Render (y similares) es **efímero**: se borra en cada redeploy/restart.
+La aplicación funciona sin PostgreSQL: si `DATABASE_URL` no existe, el workspace local y la terminal siguen funcionando normalmente. En ese modo, los archivos pueden perderse cuando la plataforma reinicia el contenedor.
 
-Por eso:
-
-1. Al **arrancar** se restaura `~/workspace` desde el último snapshot de PostgreSQL.
-2. Cada ~2 min se guarda un snapshot comprimido en la DB.
-3. Solo se guardan los **últimos 3 snapshots** → no llena la base de datos.
-4. El workspace local se limpia y se vuelve a generar desde la DB.
-
-### ¿De dónde saco la base de datos gratis?
-
-Cualquier PostgreSQL con `DATABASE_URL`:
+Si necesitas persistencia entre reinicios, puedes conectar cualquier PostgreSQL mediante `DATABASE_URL`:
 
 | Proveedor | Enlace | Notas |
 |-----------|--------|-------|
@@ -24,8 +15,8 @@ Cualquier PostgreSQL con `DATABASE_URL`:
 | **Render Postgres** | https://render.com | Free tier (puede dormir) |
 | **Aiven / ElephantSQL** | — | Otros free tiers |
 
-1. Crea un proyecto → copia la connection string (empieza por `postgres://` o `postgresql://`).
-2. En Render → Environment → añade:
+1. Crea un proyecto y copia la connection string (empieza por `postgres://` o `postgresql://`).
+2. En los secretos o variables de entorno de tu plataforma añade:
    - `DATABASE_URL` = esa URL
    - `BEBO_TOKEN` = un secreto tuyo (ej. `openssl rand -hex 24`)
 
@@ -57,7 +48,7 @@ Luego en el panel **Puertos web** aparece el link, o abrís `/p/8000/` a mano.
 | Variable | Descripción |
 |----------|-------------|
 | `BEBO_TOKEN` / `AUTH_TOKEN` | Token de acceso (recomendado) |
-| `DATABASE_URL` | PostgreSQL → restore + autosave (max 3 snapshots) |
+| `DATABASE_URL` | **Opcional**. PostgreSQL para restore + autosave (máximo 3 snapshots) |
 | `PORT` | Puerto del servidor (8080) |
 | `RENDER_EXTERNAL_HOSTNAME` | Keep-alive free tier |
 | `AUTOSAVE_INTERVAL` | Segundos entre snapshots (default 120) |
