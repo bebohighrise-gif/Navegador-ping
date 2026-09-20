@@ -41,7 +41,7 @@ def main():
         return 0
 
     try:
-        conn = psycopg2.connect(psycopg_dsn(DATABASE_URL))
+        conn = psycopg2.connect(psycopg_dsn(DATABASE_URL), connect_timeout=5)
         cur = conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS bebo_snapshots (

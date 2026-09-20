@@ -16,18 +16,21 @@ def main():
     url = os.environ.get("DATABASE_URL")
     if not url or not session:
         return 0
-    import psycopg2
-    conn = psycopg2.connect(clean_dsn(url))
-    cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS bebo_snapshots (id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), session_name TEXT NOT NULL DEFAULT 'bebo', payload TEXT NOT NULL)")
-    cur.execute("ALTER TABLE bebo_snapshots ADD COLUMN IF NOT EXISTS session_name TEXT NOT NULL DEFAULT 'bebo'")
-    cur.execute("CREATE TABLE IF NOT EXISTS bebo_deleted (path TEXT PRIMARY KEY, deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW())")
-    cur.execute("DELETE FROM bebo_snapshots WHERE session_name = %s", (session,))
-    cur.execute("DELETE FROM bebo_deleted WHERE path LIKE %s", (session + "/%",))
-    conn.commit()
-    cur.close()
-    conn.close()
-    print(f"purged session data: {session}", flush=True)
+    try:
+        import psycopg2
+        conn = psycopg2.connect(clean_dsn(url), connect_timeout=5)
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS bebo_snapshots (id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), session_name TEXT NOT NULL DEFAULT 'bebo', payload TEXT NOT NULL)")
+        cur.execute("ALTER TABLE bebo_snapshots ADD COLUMN IF NOT EXISTS session_name TEXT NOT NULL DEFAULT 'bebo'")
+        cur.execute("CREATE TABLE IF NOT EXISTS bebo_deleted (path TEXT PRIMARY KEY, deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW())")
+        cur.execute("DELETE FROM bebo_snapshots WHERE session_name = %s", (session,))
+        cur.execute("DELETE FROM bebo_deleted WHERE path LIKE %s", (session + "/%",))
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"purged session data: {session}", flush=True)
+    except Exception as exc:
+        print(f"database unavailable; skipped session purge: {exc}", file=sys.stderr, flush=True)
     return 0
 
 

@@ -116,7 +116,7 @@ try:
     parts = urlsplit(raw_url)
     clean_query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k.lower() != "uselibpqcompat"]
     db_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(clean_query), parts.fragment))
-    conn = psycopg2.connect(db_url)
+    conn = psycopg2.connect(db_url, connect_timeout=5)
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bebo_deleted (
@@ -260,8 +260,8 @@ app.post("/api/sessions/kill", requireAuth, (req, res) => {
           stdio: "pipe",
         });
       } catch (dbErr) {
-        console.error("session db purge failed:", dbErr.message);
-        return res.status(500).json({ error: "session_deleted_db_purge_failed", name });
+        // La DB es opcional: si está caída, la sesión local todavía se puede eliminar.
+        console.warn("session db purge skipped:", dbErr.message);
       }
     }
     try {
